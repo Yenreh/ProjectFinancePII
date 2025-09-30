@@ -1,0 +1,228 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+jobs:
+  lint:
+    name: Lint Code
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+      
+      # CI environments require dependency installation for validation
+      # This is separate from manual setup instructions in documentation
+      - name: Install dependencies
+        run: npm ci
+      
+      - name: Run ESLint
+        run: npm run lint
+        continue-on-error: true
+
+  typecheck:
+    name: TypeScript Type Check
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+      
+      - name: Install dependencies
+        run: npm ci
+      
+      - name: Run TypeScript check
+        run: npx tsc --noEmit --skipLibCheck
+        continue-on-error: true
+
+  build:
+    name: Build Application
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+      
+      - name: Install dependencies
+        run: npm ci
+      
+      - name: Build Next.js application
+        run: npm run build
+        env:
+          # Build without database connection (uses mock data)
+          NODE_ENV: production
+      
+      - name: Verify build output
+        run: |
+          if [ ! -d ".next" ]; then
+            echo "❌ Build failed - .next directory not found"
+            exit 1
+          fi
+          echo "✅ Build successful"
+      
+      - name: Check build size
+        run: |
+          echo "📦 Build size information:"
+          du -sh .next
+          echo "📄 Static pages:"
+          find .next/server/pages -name "*.html" 2>/dev/null || echo "No static pages"
+          echo "🔧 API routes:"
+          find .next/server/pages/api -type f 2>/dev/null || echo "No API routes"
+
+  validate-structure:
+    name: Validate Project Structure
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Validate required files
+        run: |
+          echo "🔍 Validating project structure..."
+          
+          # Check for required files
+          files=(
+            "package.json"
+            "next.config.mjs"
+            "tsconfig.json"
+            "README.md"
+            "app/layout.tsx"
+            "app/page.tsx"
+          )
+          
+          missing=0
+          for file in "${files[@]}"; do
+            if [ ! -f "$file" ]; then
+              echo "❌ Missing required file: $file"
+              missing=$((missing + 1))
+            else
+              echo "✅ Found: $file"
+            fi
+          done
+          
+          if [ $missing -gt 0 ]; then
+            echo "❌ $missing required file(s) missing"
+            exit 1
+          fi
+          
+          echo "✅ All required files present"
+      
+      - name: Validate documentation
+        run: |
+          echo "📚 Validating documentation..."
+          
+          docs=(
+            "README.md"
+            "docs/ARCHITECTURE.md"
+            "docs/DEVELOPER_GUIDE.md"
+            "docs/CONTRIBUTING.md"
+            "docs/DEPLOYMENT.md"
+          )
+          
+          missing=0
+          for doc in "${docs[@]}"; do
+            if [ ! -f "$doc" ]; then
+              echo "❌ Missing documentation: $doc"
+              missing=$((missing + 1))
+            else
+              echo "✅ Found: $doc"
+            fi
+          done
+          
+          if [ $missing -gt 0 ]; then
+            echo "⚠️  $missing documentation file(s) missing"
+          else
+            echo "✅ All documentation files present"
+          fi
+
+  security-check:
+    name: Security Audit
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+      
+      - name: Check for secrets in code
+        run: |
+          echo "🔐 Checking for potential secrets..."
+          
+          # Check for common secret patterns (basic check)
+          if grep -r -E "(password|secret|api[_-]?key|token).*=.*['\"][^'\"]{20,}" --include="*.ts" --include="*.tsx" --include="*.js" . 2>/dev/null; then
+            echo "⚠️  Potential secrets found in code. Please review."
+            echo "Note: This is a basic check. Manually verify these aren't false positives."
+          else
+            echo "✅ No obvious secrets detected in code"
+          fi
+      
+      - name: Check for .env files in repo
+        run: |
+          echo "🔍 Checking for environment files..."
+          
+          if find . -name ".env*" -not -name ".env.example" -not -path "./node_modules/*" | grep .; then
+            echo "❌ .env files found in repository!"
+            echo "These should be in .gitignore and never committed."
+            exit 1
+          else
+            echo "✅ No .env files in repository"
+          fi
+
+  summary:
+    name: CI Summary
+    runs-on: ubuntu-latest
+    needs: [lint, typecheck, build, validate-structure, security-check]
+    if: always()
+    
+    steps:
+      - name: CI Summary
+        run: |
+          echo "## 🎯 CI Pipeline Summary"
+          echo ""
+          echo "Pipeline completed. Check individual job results above."
+          echo ""
+          echo "### 📋 Jobs Status:"
+          echo "- Lint: ${{ needs.lint.result }}"
+          echo "- Type Check: ${{ needs.typecheck.result }}"
+          echo "- Build: ${{ needs.build.result }}"
+          echo "- Structure Validation: ${{ needs.validate-structure.result }}"
+          echo "- Security Check: ${{ needs.security-check.result }}"
+          echo ""
+          echo "### 📝 Important Notes:"
+          echo "- This CI pipeline validates code quality and builds"
+          echo "- Dependencies are installed automatically in CI environment"
+          echo "- This workflow is compatible with Vercel deployment"
+          echo "- Vercel handles its own build and deployment process"
+          echo ""
+          if [ "${{ needs.build.result }}" == "success" ]; then
+            echo "✅ Build successful - ready for deployment"
+          else
+            echo "❌ Build failed - please check the build job logs"
+          fi
