@@ -1,42 +1,7 @@
 import { NextResponse } from "next/server"
+import { dbQueries, sql } from "@/lib/db"
+import { mockTransactions } from "@/lib/mock-data"
 import type { Transaction } from "@/lib/types"
-
-// Mock data (shared with route.ts)
-const mockTransactions: Transaction[] = [
-  {
-    id: 1,
-    account_id: 2,
-    category_id: 1,
-    type: "ingreso",
-    amount: 3000.0,
-    description: "Salario mensual",
-    date: "2025-01-15",
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-  },
-  {
-    id: 2,
-    account_id: 1,
-    category_id: 6,
-    type: "gasto",
-    amount: 45.5,
-    description: "Supermercado",
-    date: "2025-01-16",
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-  },
-  {
-    id: 3,
-    account_id: 3,
-    category_id: 10,
-    type: "gasto",
-    amount: 25.0,
-    description: "Netflix",
-    date: "2025-01-17",
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-  },
-]
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -44,19 +9,43 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     const transactionId = Number.parseInt(id)
     const body = await request.json()
 
-    const transactionIndex = mockTransactions.findIndex((t) => t.id === transactionId)
+    let updatedTransaction: Transaction
 
-    if (transactionIndex === -1) {
-      return NextResponse.json({ error: "Transacción no encontrada" }, { status: 404 })
+    // Use database if available, otherwise fallback to mock data
+    if (sql) {
+      try {
+        updatedTransaction = await dbQueries.updateTransaction(transactionId, body)
+      } catch (error) {
+        console.error("[v0] Database error, falling back to mock data:", error)
+        // Fallback to mock data update
+        const transactionIndex = mockTransactions.findIndex((t) => t.id === transactionId)
+        if (transactionIndex === -1) {
+          return NextResponse.json({ error: "Transacción no encontrada" }, { status: 404 })
+        }
+
+        mockTransactions[transactionIndex] = {
+          ...mockTransactions[transactionIndex],
+          ...body,
+          updated_at: new Date().toISOString(),
+        }
+        updatedTransaction = mockTransactions[transactionIndex]
+      }
+    } else {
+      // Mock data update
+      const transactionIndex = mockTransactions.findIndex((t) => t.id === transactionId)
+      if (transactionIndex === -1) {
+        return NextResponse.json({ error: "Transacción no encontrada" }, { status: 404 })
+      }
+
+      mockTransactions[transactionIndex] = {
+        ...mockTransactions[transactionIndex],
+        ...body,
+        updated_at: new Date().toISOString(),
+      }
+      updatedTransaction = mockTransactions[transactionIndex]
     }
 
-    mockTransactions[transactionIndex] = {
-      ...mockTransactions[transactionIndex],
-      ...body,
-      updated_at: new Date().toISOString(),
-    }
-
-    return NextResponse.json(mockTransactions[transactionIndex])
+    return NextResponse.json(updatedTransaction)
   } catch (error) {
     console.error("[v0] Error updating transaction:", error)
     return NextResponse.json({ error: "Error al actualizar transacción" }, { status: 500 })
@@ -68,13 +57,30 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
     const { id } = await params
     const transactionId = Number.parseInt(id)
 
-    const transactionIndex = mockTransactions.findIndex((t) => t.id === transactionId)
-
-    if (transactionIndex === -1) {
-      return NextResponse.json({ error: "Transacción no encontrada" }, { status: 404 })
+    // Use database if available, otherwise fallback to mock data
+    if (sql) {
+      try {
+        const success = await dbQueries.deleteTransaction(transactionId)
+        if (!success) {
+          return NextResponse.json({ error: "Transacción no encontrada" }, { status: 404 })
+        }
+      } catch (error) {
+        console.error("[v0] Database error, falling back to mock data:", error)
+        // Fallback to mock data deletion
+        const transactionIndex = mockTransactions.findIndex((t) => t.id === transactionId)
+        if (transactionIndex === -1) {
+          return NextResponse.json({ error: "Transacción no encontrada" }, { status: 404 })
+        }
+        mockTransactions.splice(transactionIndex, 1)
+      }
+    } else {
+      // Mock data deletion
+      const transactionIndex = mockTransactions.findIndex((t) => t.id === transactionId)
+      if (transactionIndex === -1) {
+        return NextResponse.json({ error: "Transacción no encontrada" }, { status: 404 })
+      }
+      mockTransactions.splice(transactionIndex, 1)
     }
-
-    mockTransactions.splice(transactionIndex, 1)
 
     return NextResponse.json({ success: true })
   } catch (error) {

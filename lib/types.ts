@@ -16,7 +16,7 @@ export interface Account {
   type: AccountType
   balance: number
   currency: string
-  is_archived: number
+  is_archived: boolean | number // Allow both for compatibility
   created_at: string
   updated_at: string
 }

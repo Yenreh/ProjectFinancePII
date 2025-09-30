@@ -1,49 +1,30 @@
 import { NextResponse } from "next/server"
+import { dbQueries, sql } from "@/lib/db"
+import { mockAccounts } from "@/lib/mock-data"
 import type { Account } from "@/lib/types"
-
-// Mock data for accounts (in production, this would query the database)
-const mockAccounts: Account[] = [
-  {
-    id: 1,
-    name: "Efectivo",
-    type: "efectivo",
-    balance: 500.0,
-    currency: "USD",
-    is_archived: 0,
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-  },
-  {
-    id: 2,
-    name: "Banco Principal",
-    type: "banco",
-    balance: 5000.0,
-    currency: "USD",
-    is_archived: 0,
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-  },
-  {
-    id: 3,
-    name: "Tarjeta de Crédito",
-    type: "tarjeta",
-    balance: -1200.0,
-    currency: "USD",
-    is_archived: 0,
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-  },
-]
 
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url)
     const includeArchived = searchParams.get("includeArchived") === "true"
 
-    let accounts = mockAccounts
+    let accounts: Account[] = []
 
-    if (!includeArchived) {
-      accounts = accounts.filter((acc) => acc.is_archived === 0)
+    // Use database if available, otherwise fallback to mock data
+    if (sql) {
+      try {
+        accounts = await dbQueries.getAccounts(includeArchived)
+      } catch (error) {
+        console.error("[v0] Database error, falling back to mock data:", error)
+        accounts = mockAccounts
+      }
+    } else {
+      accounts = mockAccounts
+    }
+
+    // Apply filtering for mock data or if database didn't handle filtering
+    if (!sql && !includeArchived) {
+      accounts = accounts.filter((acc) => !acc.is_archived)
     }
 
     return NextResponse.json(accounts)
@@ -63,18 +44,41 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Datos incompletos" }, { status: 400 })
     }
 
-    const newAccount: Account = {
-      id: Math.max(...mockAccounts.map((a) => a.id), 0) + 1,
+    const newAccountData = {
       name,
       type,
       balance: Number.parseFloat(balance),
       currency: currency || "USD",
-      is_archived: 0,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
+      is_archived: false,
     }
 
-    mockAccounts.push(newAccount)
+    let newAccount: Account
+
+    // Use database if available, otherwise fallback to mock data
+    if (sql) {
+      try {
+        newAccount = await dbQueries.createAccount(newAccountData)
+      } catch (error) {
+        console.error("[v0] Database error, falling back to mock data:", error)
+        // Fallback to mock data creation
+        newAccount = {
+          ...newAccountData,
+          id: Math.max(...mockAccounts.map((a) => a.id), 0) + 1,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        }
+        mockAccounts.push(newAccount)
+      }
+    } else {
+      // Mock data creation
+      newAccount = {
+        ...newAccountData,
+        id: Math.max(...mockAccounts.map((a) => a.id), 0) + 1,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      }
+      mockAccounts.push(newAccount)
+    }
 
     return NextResponse.json(newAccount, { status: 201 })
   } catch (error) {
