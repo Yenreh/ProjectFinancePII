@@ -174,9 +174,12 @@ const CATEGORY_MAPPINGS: Record<string, string[]> = {
  * Nombres de cuentas comunes
  */
 const ACCOUNT_MAPPINGS: Record<string, string[]> = {
-  Efectivo: ["efectivo", "cash", "plata"],
-  Banco: ["banco", "cuenta", "ahorros"],
-  Tarjeta: ["tarjeta", "crédito", "débito"],
+  Efectivo: ["efectivo", "cash", "plata", "en efectivo"],
+  Banco: ["banco", "cuenta", "ahorros", "bancolombia", "davivienda", "nequi"],
+  Tarjeta: ["tarjeta", "crédito", "débito", "visa", "mastercard"],
+  Nu: ["nu", "en nu", "cuenta nu", "en nubank", "nubank", "cuenta nubank"],
+  Bancolombia: ["bancolombia", "en bancolombia"],
+  Nequi: ["nequi", "en nequi"],
 }
 
 /**
@@ -288,8 +291,17 @@ function detectQueryType(text: string): QueryType {
     return "total_hoy"
   }
 
-  // Balance/saldo
-  if (normalizedText.includes("balance") || normalizedText.includes("saldo")) {
+  // Balance/saldo - agregar más variaciones
+  if (
+    normalizedText.includes("balance") || 
+    normalizedText.includes("saldo") ||
+    normalizedText.includes("cuál es mi balance") ||
+    normalizedText.includes("cual es mi balance") ||
+    normalizedText.includes("mi balance") ||
+    normalizedText.includes("mi saldo") ||
+    (normalizedText.includes("cuánto") && normalizedText.includes("tengo")) ||
+    (normalizedText.includes("cuanto") && normalizedText.includes("tengo"))
+  ) {
     return "balance"
   }
 
@@ -661,20 +673,43 @@ export function enrichWithDatabaseIds(
 
   // Buscar ID de cuenta
   if (enriched.accountName && !enriched.accountId) {
-    const account = accounts.find(
+    // Primero intentar match exacto
+    let account = accounts.find(
       (a) => a.name.toLowerCase() === enriched.accountName?.toLowerCase()
     )
+    
+    // Si no hay match exacto, buscar en las keywords del ACCOUNT_MAPPINGS
+    if (!account) {
+      for (const [accountKey, keywords] of Object.entries(ACCOUNT_MAPPINGS)) {
+        if (keywords.some(k => k.toLowerCase() === enriched.accountName?.toLowerCase())) {
+          account = accounts.find(a => a.name.toLowerCase() === accountKey.toLowerCase())
+          break
+        }
+      }
+    }
+    
+    // Si aún no hay match, buscar por coincidencia parcial
+    if (!account) {
+      account = accounts.find(a => 
+        a.name.toLowerCase().includes(enriched.accountName?.toLowerCase() || '') ||
+        enriched.accountName?.toLowerCase().includes(a.name.toLowerCase())
+      )
+    }
+    
     if (account) {
       enriched.accountId = account.id
       enriched.accountName = account.name // Usar nombre exacto de la BD
     }
   }
 
-  // Si no hay cuenta especificada, usar la primera disponible
-  if (!enriched.accountId && accounts.length > 0) {
+  // Si no hay cuenta especificada Y solo hay UNA cuenta, usarla automáticamente
+  if (!enriched.accountId && accounts.length === 1) {
     enriched.accountId = accounts[0].id
     enriched.accountName = accounts[0].name
   }
+  
+  // Si hay múltiples cuentas y no se especificó, NO asignar ninguna
+  // Esto forzará al sistema a preguntar
 
   return enriched
 }

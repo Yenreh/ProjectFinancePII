@@ -63,6 +63,7 @@ export interface VoiceProcessingResult {
   parsedCommand?: ParsedVoiceCommand
   transactionId?: number
   needsConfirmation: boolean
+  needsAdditionalInfo?: boolean  // Indica que el comando está incompleto y espera más información
   suggestions?: string[]
   error?: string
 }

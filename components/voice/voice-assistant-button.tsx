@@ -3,7 +3,7 @@
 import { useState } from "react"
 import { Mic, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { Dialog, DialogContent } from "@/components/ui/dialog"
+import { Dialog, DialogContent, DialogTitle, DialogDescription } from "@/components/ui/dialog"
 import { VoiceAssistant } from "./voice-assistant"
 
 interface VoiceAssistantButtonProps {
@@ -36,6 +36,10 @@ export function VoiceAssistantButton({ onTransactionCreated }: VoiceAssistantBut
       {/* Diálogo con el asistente */}
       <Dialog open={isOpen} onOpenChange={setIsOpen}>
         <DialogContent className="max-w-2xl">
+          <DialogTitle className="sr-only">Asistente de Voz</DialogTitle>
+          <DialogDescription className="sr-only">
+            Registra transacciones usando tu voz
+          </DialogDescription>
           <VoiceAssistant onTransactionCreated={handleTransactionCreated} />
         </DialogContent>
       </Dialog>

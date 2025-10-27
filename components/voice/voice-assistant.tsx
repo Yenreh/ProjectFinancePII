@@ -49,9 +49,16 @@ export function VoiceAssistant({ onTransactionCreated }: VoiceAssistantProps) {
   const [error, setError] = useState<string | null>(null)
   const [isInCorrectionMode, setIsInCorrectionMode] = useState(false)
   const [originalCommand, setOriginalCommand] = useState<ParsedVoiceCommand | null>(null)
+  const [pendingCommand, setPendingCommand] = useState<ParsedVoiceCommand | null>(null)
   const [isContinuousMode, setIsContinuousMode] = useState(false)
 
   const audioRef = useRef<HTMLAudioElement | null>(null)
+  const pendingCommandRef = useRef<ParsedVoiceCommand | null>(null)
+  
+  // Sincronizar ref con state
+  useEffect(() => {
+    pendingCommandRef.current = pendingCommand
+  }, [pendingCommand])
 
   const {
     recordingState,
@@ -94,10 +101,23 @@ export function VoiceAssistant({ onTransactionCreated }: VoiceAssistantProps) {
     try {
       const payload: any = { transcription: text }
       
+      console.log('[Voice UI] ===== INICIO DE PROCESAMIENTO =====')
+      console.log('[Voice UI] Transcripción:', text)
+      console.log('[Voice UI] Comando pendiente actual (state):', pendingCommand)
+      console.log('[Voice UI] Comando pendiente actual (ref):', pendingCommandRef.current)
+      console.log('[Voice UI] Comando original actual:', originalCommand)
+      
+      // USAR EL REF en lugar del state para obtener el valor más reciente
+      if (pendingCommandRef.current) {
+        payload.pendingCommand = pendingCommandRef.current
+        console.log('[Voice UI] ➡️ Enviando respuesta con contexto pendiente:', pendingCommandRef.current)
+      }
+      
       // Si estamos en modo corrección, incluir el comando original
-      if (isInCorrectionMode && originalCommand) {
+      else if (isInCorrectionMode && originalCommand) {
         payload.isCorrection = true
         payload.originalCommand = originalCommand
+        console.log('[Voice UI] ➡️ Enviando corrección con comando original:', originalCommand)
       }
 
       const response = await fetch("/api/voice/process-command", {
@@ -111,12 +131,35 @@ export function VoiceAssistant({ onTransactionCreated }: VoiceAssistantProps) {
       }
 
       const result: VoiceProcessingResult = await response.json()
+      console.log('[Voice UI] ⬅️ Respuesta recibida:', {
+        success: result.success,
+        needsConfirmation: result.needsConfirmation,
+        needsAdditionalInfo: result.needsAdditionalInfo,
+        message: result.message,
+        parsedCommand: result.parsedCommand
+      })
       setProcessingResult(result)
+
+      // Si el resultado indica que necesita información adicional, guardar como pendiente
+      if (result.needsAdditionalInfo && result.parsedCommand) {
+        setPendingCommand(result.parsedCommand)
+        pendingCommandRef.current = result.parsedCommand  // Actualizar ref inmediatamente
+        console.log('[Voice UI] 💾 Guardando comando como pendiente (falta info):', result.parsedCommand)
+      } 
+      // Si la transacción fue exitosa o se está pidiendo confirmación, limpiar pendiente
+      else if (result.success || result.needsConfirmation) {
+        setPendingCommand(null)
+        pendingCommandRef.current = null  // Limpiar ref también
+        console.log('[Voice UI] 🧹 Limpiando comando pendiente')
+      }
 
       // Guardar el comando parseado para posibles correcciones
       if (result.parsedCommand) {
         setOriginalCommand(result.parsedCommand)
       }
+      
+      console.log('[Voice UI] ===== FIN DE PROCESAMIENTO =====')
+      console.log('')
 
       // HU-010: Manejar comandos de control
       if (result.parsedCommand?.intention === "control") {
@@ -162,9 +205,9 @@ export function VoiceAssistant({ onTransactionCreated }: VoiceAssistantProps) {
         await speakMessage(result.message)
       }
 
-      // HU-013: Si hubo error, reproducir sugerencias por voz
+      // HU-013: Si hubo error Y hay sugerencias, reproducirlas DESPUÉS del mensaje principal
       if (!result.success && result.suggestions && result.suggestions.length > 0) {
-        const suggestionsText = result.suggestions.join(". ")
+        const suggestionsText = "Puedes decir: " + result.suggestions.join(", o ")
         await speakMessage(suggestionsText)
       }
 
@@ -200,6 +243,12 @@ export function VoiceAssistant({ onTransactionCreated }: VoiceAssistantProps) {
 
   async function speakMessage(message: string) {
     try {
+      // Detener cualquier audio anterior antes de reproducir uno nuevo
+      if (audioRef.current && !audioRef.current.paused) {
+        audioRef.current.pause()
+        audioRef.current.currentTime = 0
+      }
+      
       setIsSpeaking(true)
 
       const response = await fetch("/api/voice/text-to-speech", {
@@ -210,6 +259,7 @@ export function VoiceAssistant({ onTransactionCreated }: VoiceAssistantProps) {
 
       if (!response.ok) {
         console.error("Error al sintetizar voz")
+        setIsSpeaking(false)
         return
       }
 
@@ -226,11 +276,31 @@ export function VoiceAssistant({ onTransactionCreated }: VoiceAssistantProps) {
         setIsSpeaking(false)
         URL.revokeObjectURL(audioUrl)
       }
+      
+      // Manejar errores de reproducción
+      audioRef.current.onerror = () => {
+        console.error("Error al reproducir audio")
+        setIsSpeaking(false)
+        URL.revokeObjectURL(audioUrl)
+      }
 
       await audioRef.current.play()
 
     } catch (err) {
       console.error("Error reproduciendo audio:", err)
+      setIsSpeaking(false)
+    }
+  }
+  
+  function stopAudio() {
+    if (audioRef.current) {
+      audioRef.current.pause()
+      audioRef.current.currentTime = 0
+      // Limpiar la URL del blob si existe
+      if (audioRef.current.src) {
+        URL.revokeObjectURL(audioRef.current.src)
+        audioRef.current.src = ''
+      }
       setIsSpeaking(false)
     }
   }
@@ -270,6 +340,11 @@ export function VoiceAssistant({ onTransactionCreated }: VoiceAssistantProps) {
           duration: 5000,
         })
         onTransactionCreated?.()
+        
+        // Limpiar el comando pendiente después de confirmar exitosamente
+        setPendingCommand(null)
+        pendingCommandRef.current = null
+        setOriginalCommand(null)
       }
 
     } catch (err) {
@@ -297,6 +372,9 @@ export function VoiceAssistant({ onTransactionCreated }: VoiceAssistantProps) {
     setError(null)
     setIsInCorrectionMode(false)
     setOriginalCommand(null)
+    setPendingCommand(null)
+    pendingCommandRef.current = null  // Limpiar ref también
+    stopAudio()
     cancelRecording()
   }
 
@@ -305,6 +383,19 @@ export function VoiceAssistant({ onTransactionCreated }: VoiceAssistantProps) {
     setError(null)
     setIsInCorrectionMode(false)
     setOriginalCommand(null)
+    stopAudio()
+    // NO limpiar pendingCommand aquí - se limpia solo cuando se completa o cancela
+  }
+  
+  function handleCancelAll() {
+    // Esta función limpia TODO, incluyendo pendingCommand
+    setProcessingResult(null)
+    setError(null)
+    setIsInCorrectionMode(false)
+    setOriginalCommand(null)
+    setPendingCommand(null)
+    pendingCommandRef.current = null  // Limpiar ref también
+    stopAudio()
   }
 
   // HU-010: Manejar comandos de control (modo manos libres)
@@ -408,9 +499,20 @@ export function VoiceAssistant({ onTransactionCreated }: VoiceAssistantProps) {
           )}
 
           {isSpeaking && (
-            <div className="flex items-center gap-2 text-blue-500">
-              <Volume2 className="h-6 w-6 animate-pulse" />
-              <span>Reproduciendo respuesta...</span>
+            <div className="flex flex-col items-center gap-3">
+              <div className="flex items-center gap-2 text-blue-500">
+                <Volume2 className="h-6 w-6 animate-pulse" />
+                <span>Reproduciendo respuesta...</span>
+              </div>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={stopAudio}
+                className="text-red-600 border-red-600 hover:bg-red-50"
+              >
+                <X className="h-4 w-4 mr-2" />
+                Detener audio
+              </Button>
             </div>
           )}
         </div>
@@ -535,13 +637,35 @@ export function VoiceAssistant({ onTransactionCreated }: VoiceAssistantProps) {
         {/* HU-013: Botón para repetir comando en caso de error */}
         {!showConfirmation && !showSuccess && processingResult && !processingResult.success && (
           <div className="flex gap-2">
-            <Button className="flex-1" onClick={handleStartNew}>
-              Intentar de nuevo
-            </Button>
-            <Button variant="outline" className="flex-1" onClick={startRecording}>
-              <RefreshCw className="h-4 w-4 mr-2" />
-              Repetir
-            </Button>
+            {/* Si hay pendingCommand (usar ref para verificar), solo limpiar el resultado para reintentar responder */}
+            {(pendingCommand || pendingCommandRef.current) ? (
+              <>
+                <Button className="flex-1" onClick={() => {
+                  console.log('[Voice UI] 🔄 Responder de nuevo - pendingCommand:', pendingCommandRef.current)
+                  setProcessingResult(null)
+                  setError(null)
+                  stopAudio()
+                  // NO cambiar pendingCommand state ni ref, solo iniciar grabación
+                  setTimeout(() => startRecording(), 100)
+                }}>
+                  Responder de nuevo
+                </Button>
+                <Button variant="outline" className="flex-1" onClick={handleCancelAll}>
+                  <X className="h-4 w-4 mr-2" />
+                  Cancelar todo
+                </Button>
+              </>
+            ) : (
+              <>
+                <Button className="flex-1" onClick={handleStartNew}>
+                  Intentar de nuevo
+                </Button>
+                <Button variant="outline" className="flex-1" onClick={startRecording}>
+                  <RefreshCw className="h-4 w-4 mr-2" />
+                  Repetir
+                </Button>
+              </>
+            )}
           </div>
         )}
 

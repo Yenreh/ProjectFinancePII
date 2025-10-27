@@ -21,9 +21,9 @@ export async function GET(request: NextRequest) {
       endDate: todayStr,
     })
 
-    // Calcular total
+    // Calcular total (convertir a número porque la DB retorna strings)
     const total = todayTransactions.reduce(
-      (sum, transaction) => sum + transaction.amount,
+      (sum, transaction) => sum + Number(transaction.amount),
       0
     )
 
@@ -38,7 +38,7 @@ export async function GET(request: NextRequest) {
         transactions: todayTransactions.map((t) => ({
           id: t.id,
           type: t.type,
-          amount: t.amount,
+          amount: Number(t.amount),  // Convertir a número también aquí
           categoryName: t.category_name,
           description: t.description,
         })),

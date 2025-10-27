@@ -34,7 +34,7 @@ export async function GET(request: NextRequest) {
       transaction: {
         id: lastTransaction.id,
         type: lastTransaction.type,
-        amount: lastTransaction.amount,
+        amount: Number(lastTransaction.amount),  // Convertir a número
         description: lastTransaction.description,
         categoryName: lastTransaction.category_name,
         accountName: lastTransaction.account_name,

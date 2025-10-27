@@ -14,7 +14,7 @@ import type { VoiceProcessingResult } from "@/lib/voice-types"
 
 export async function POST(request: NextRequest) {
   try {
-    const { transcription, confirmed, parsedData, isCorrection, originalCommand } = await request.json()
+    const { transcription, confirmed, parsedData, isCorrection, originalCommand, pendingCommand } = await request.json()
 
     if (!transcription && !confirmed) {
       return NextResponse.json(
@@ -28,6 +28,55 @@ export async function POST(request: NextRequest) {
       dbQueries.getCategories(),
       dbQueries.getAccounts(),
     ])
+
+    // Si hay un comando pendiente (esperando información adicional como cuenta)
+    if (pendingCommand && transcription) {
+      console.log('[Voice] Procesando respuesta a pregunta pendiente:', transcription)
+      console.log('[Voice] Comando pendiente:', pendingCommand)
+      
+      // Parsear la nueva entrada para extraer la cuenta
+      const newParsed = parseVoiceCommand(transcription)
+      
+      // Combinar: tomar cuenta de la nueva respuesta, resto del comando pendiente
+      const combined = {
+        ...pendingCommand,
+        accountName: newParsed.accountName || pendingCommand.accountName,
+        accountId: newParsed.accountId || pendingCommand.accountId,
+        originalText: `${pendingCommand.originalText} + ${transcription}`,
+      }
+      
+      // Enriquecer con IDs de la base de datos
+      const enriched = enrichWithDatabaseIds(combined, categories, accounts)
+      const backendValidation = validateBackendFormat(enriched)
+      
+      console.log('[Voice] Comando combinado:', enriched)
+      console.log('[Voice] Validación backend:', backendValidation)
+      
+      if (backendValidation.valid) {
+        const confirmationMessage = generateConfirmationMessage(enriched)
+        
+        const result: VoiceProcessingResult = {
+          success: true,
+          message: confirmationMessage,
+          parsedCommand: enriched,
+          needsConfirmation: true,
+        }
+        
+        return NextResponse.json(result)
+      } else {
+        // Aún falta información
+        const result: VoiceProcessingResult = {
+          success: false,
+          message: `Todavía falta información: ${backendValidation.errors.join(", ")}`,
+          parsedCommand: enriched,
+          needsConfirmation: false,
+          needsAdditionalInfo: true,  // Aún esperando más información
+          suggestions: generateSuggestions(enriched),
+        }
+        
+        return NextResponse.json(result)
+      }
+    }
 
     // Si es una corrección, aplicarla al comando original
     if (isCorrection && originalCommand && transcription) {
@@ -81,6 +130,20 @@ export async function POST(request: NextRequest) {
     
     const validation = validateParsedCommand(parsed)
     const backendValidation = validateBackendFormat(parsed)
+
+    // NUEVO: Si hay múltiples cuentas y no se especificó cuál, preguntar (mantener contexto)
+    if (parsed.transactionType && !parsed.accountId && accounts.length > 1) {
+      const accountsList = accounts.map(a => a.name).join(", ")
+      const result: VoiceProcessingResult = {
+        success: false,
+        message: `Tienes ${accounts.length} cuentas: ${accountsList}. ¿En cuál cuenta quieres registrar esta transacción?`,
+        parsedCommand: parsed,  // Guardar el comando actual
+        needsConfirmation: false,
+        needsAdditionalInfo: true,  // Bandera para indicar que espera más info
+        suggestions: accounts.map(a => `en ${a.name.toLowerCase()}`),
+      }
+      return NextResponse.json(result)
+    }
 
     // Si el comando es válido para el backend, generar confirmación
     if (validation.valid && backendValidation.valid && parsed.transactionType && parsed.amount) {
@@ -223,10 +286,51 @@ async function processQuery(parsed: any) {
         return NextResponse.json(result)
       }
 
+      case "balance": {
+        // Obtener todas las cuentas con sus balances
+        const accounts = await dbQueries.getAccounts()
+
+        if (accounts.length === 0) {
+          const result: VoiceProcessingResult = {
+            success: true,
+            message: "No tienes cuentas registradas aún",
+            parsedCommand: parsed,
+            needsConfirmation: false,
+          }
+          return NextResponse.json(result)
+        }
+
+        // Calcular balance total
+        const totalBalance = accounts.reduce((sum, account) => {
+          return sum + Number(account.balance)
+        }, 0)
+
+        // Generar mensaje con detalle por cuenta
+        let message = `Tu balance total es de $${totalBalance.toLocaleString("es-CO")} pesos. `
+        
+        if (accounts.length === 1) {
+          message += `En tu cuenta ${accounts[0].name}.`
+        } else {
+          message += "Distribuido en: "
+          const accountDetails = accounts.map(acc => 
+            `${acc.name} con $${Number(acc.balance).toLocaleString("es-CO")}`
+          ).join(", ")
+          message += accountDetails
+        }
+
+        const result: VoiceProcessingResult = {
+          success: true,
+          message,
+          parsedCommand: parsed,
+          needsConfirmation: false,
+        }
+        return NextResponse.json(result)
+      }
+
       default: {
         const result: VoiceProcessingResult = {
           success: false,
-          message: "No entendí tu consulta. Puedes preguntar por tu último gasto, último ingreso o cuánto gastaste hoy",
+          message: "No entendí tu consulta. Puedes preguntar por tu último gasto, último ingreso, cuánto gastaste hoy o cuál es tu balance",
           parsedCommand: parsed,
           needsConfirmation: false,
         }
@@ -361,16 +465,23 @@ async function processConfirmedTransaction(parsedData: any) {
     console.log(`[Voice] Transacción creada: ID=${transaction.id}, Tipo=${parsedData.transactionType}, Monto=${parsedData.amount}, Cuenta=${parsedData.accountId}`)
 
     // Actualizar el balance de la cuenta
+    const oldBalance = Number(account.balance) || 0  // Convertir a número por si viene como string
+    const amount = Number(parsedData.amount) || 0
+    
     const newBalance =
       parsedData.transactionType === "ingreso"
-        ? account.balance + parsedData.amount
-        : account.balance - parsedData.amount
+        ? oldBalance + amount
+        : oldBalance - amount
 
-    console.log(`[Voice] Actualizando balance: Cuenta=${parsedData.accountId}, Balance anterior=${account.balance}, Nuevo balance=${newBalance}`)
+    console.log(`[Voice] Actualizando balance: Cuenta=${parsedData.accountId} (${account.name}), Balance anterior=${oldBalance} (${typeof account.balance}), Monto=${amount}, Nuevo balance=${newBalance}`)
 
-    await dbQueries.updateAccount(parsedData.accountId, { balance: newBalance })
-
-    console.log(`[Voice] Balance actualizado exitosamente`)
+    try {
+      const updatedAccount = await dbQueries.updateAccount(parsedData.accountId, { balance: newBalance })
+      console.log(`[Voice] Balance actualizado exitosamente. Balance en DB: ${updatedAccount.balance}`)
+    } catch (error) {
+      console.error(`[Voice] ERROR actualizando balance:`, error)
+      throw error
+    }
 
     // Mensaje de confirmación detallado
     const typeText = parsedData.transactionType === "ingreso" ? "Ingreso" : "Gasto"
