@@ -30,7 +30,7 @@ export function AccountFormDialog({ open, onOpenChange, account, onSuccess }: Ac
     name: "",
     type: "efectivo" as AccountType,
     balance: "0",
-    currency: "USD",
+    currency: "COP",
   })
 
   useEffect(() => {
@@ -46,7 +46,7 @@ export function AccountFormDialog({ open, onOpenChange, account, onSuccess }: Ac
         name: "",
         type: "efectivo",
         balance: "0",
-        currency: "USD",
+        currency: "COP",
       })
     }
   }, [account, open])
@@ -140,6 +140,7 @@ export function AccountFormDialog({ open, onOpenChange, account, onSuccess }: Ac
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
+                  <SelectItem value="COP">COP - Peso Colombiano</SelectItem>
                   <SelectItem value="USD">USD - Dólar</SelectItem>
                   <SelectItem value="EUR">EUR - Euro</SelectItem>
                   <SelectItem value="MXN">MXN - Peso Mexicano</SelectItem>

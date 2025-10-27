@@ -1,15 +1,15 @@
-export function formatCurrency(amount: number, currency = "USD"): string {
-  return new Intl.NumberFormat("es-ES", {
+export function formatCurrency(amount: number, currency = "COP"): string {
+  return new Intl.NumberFormat("es-CO", {
     style: "currency",
     currency: currency,
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
   }).format(amount)
 }
 
 export function formatDate(date: string | Date): string {
   const d = typeof date === "string" ? new Date(date) : date
-  return new Intl.DateTimeFormat("es-ES", {
+  return new Intl.DateTimeFormat("es-CO", {
     year: "numeric",
     month: "long",
     day: "numeric",
@@ -18,7 +18,7 @@ export function formatDate(date: string | Date): string {
 
 export function formatDateShort(date: string | Date): string {
   const d = typeof date === "string" ? new Date(date) : date
-  return new Intl.DateTimeFormat("es-ES", {
+  return new Intl.DateTimeFormat("es-CO", {
     year: "numeric",
     month: "2-digit",
     day: "2-digit",

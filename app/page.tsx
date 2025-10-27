@@ -48,7 +48,7 @@ export default function DashboardPage() {
           <>
             <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4 mb-8">
               <MetricCard
-                title="Balance"
+                title="Balance de Movimientos"
                 value={formatCurrency(metrics.balance)}
                 icon={Wallet}
                 className={metrics.balance < 0 ? "border-destructive/50" : "border-success/50"}

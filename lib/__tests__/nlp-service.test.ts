@@ -102,8 +102,18 @@ console.log("✅ Test 9 pasado\n")
 // Test 10: Extraer montos con puntos separadores
 console.log("Test 10: Extraer montos con puntos separadores")
 const test10 = parseVoiceCommand("gasté 1.500.000 pesos")
-console.assert(test10.amount === 1500000, "Debe extraer monto 1500000")
+console.assert(test10.amount === 1500000, `Debe extraer monto 1.500.000, obtuvo ${test10.amount}`)
 console.log("✅ Test 10 pasado\n")
+
+console.log("Test 10b: Extraer montos con espacios separadores")
+const test10b = parseVoiceCommand("gasté 50 000 en comida")
+console.assert(test10b.amount === 50000, `Debe extraer monto 50 000, obtuvo ${test10b.amount}`)
+console.log("✅ Test 10b pasado\n")
+
+console.log("Test 10c: Extraer montos sin separadores")
+const test10c = parseVoiceCommand("gasté 50000 en comida")
+console.assert(test10c.amount === 50000, `Debe extraer monto 50000 sin separadores, obtuvo ${test10c.amount}`)
+console.log("✅ Test 10c pasado\n")
 
 console.log("🎉 Todos los tests pasaron exitosamente!")
 
@@ -341,12 +351,12 @@ console.log("\n=== Tests de Integración con Categorías ===\n")
 console.log("Test 33: Mapeo de palabra clave a categoría exacta")
 const test33 = parseVoiceCommand("gasté 50000 en hamburguesa")
 const mockCategoriesHU14 = [
-  { id: 1, name: "Alimentos", type: "gasto" as const, icon: "🍔", color: "#FF5733", created_at: "" },
+  { id: 1, name: "Alimentación", type: "gasto" as const, icon: "🍔", color: "#FF5733", created_at: "" },
   { id: 2, name: "Transporte", type: "gasto" as const, icon: "🚗", color: "#33C3FF", created_at: "" },
 ]
 const mockAccountsHU14 = [{ id: 1, name: "Efectivo", type: "efectivo" as const, balance: 1000000, currency: "COP", is_archived: false, created_at: "", updated_at: "" }]
 const enrichedHU14 = enrichWithDatabaseIds(test33, mockCategoriesHU14, mockAccountsHU14)
-console.assert(enrichedHU14.categoryName === "Alimentos", "Debe mapear 'hamburguesa' a 'Alimentos'")
+console.assert(enrichedHU14.categoryName === "Alimentación", "Debe mapear 'hamburguesa' a 'Alimentación'")
 console.assert(enrichedHU14.categoryId === 1, "Debe tener ID de categoría")
 console.log("✅ Test 33 pasado\n")
 
@@ -368,8 +378,8 @@ console.log("✅ Test 35 pasado\n")
 console.log("🎉 Todos los tests de integración con categorías pasaron!")
 
 console.log("\n=== 🎉 TODOS LOS TESTS COMPLETADOS EXITOSAMENTE ===")
-console.log("Total de tests ejecutados: 35")
-console.log("- Análisis de intenciones: 10 tests")
+console.log("Total de tests ejecutados: 37")
+console.log("- Análisis de intenciones: 12 tests")
 console.log("- Correcciones: 5 tests")
 console.log("- Ingresos: 3 tests")
 console.log("- Modismos: 4 tests")

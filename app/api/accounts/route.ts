@@ -48,7 +48,7 @@ export async function POST(request: Request) {
       name,
       type,
       balance: Number.parseFloat(balance),
-      currency: currency || "USD",
+      currency: currency || "COP",
       is_archived: false,
     }
 

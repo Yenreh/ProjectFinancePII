@@ -18,7 +18,7 @@ export async function GET(request: Request) {
     if (sql) {
       try {
         const filters = {
-          type: type && (type === "ingreso" || type === "gasto") ? type : undefined,
+          type: (type === "ingreso" || type === "gasto") ? type as "ingreso" | "gasto" : undefined,
           accountId: accountId ? Number.parseInt(accountId) : undefined,
           categoryId: categoryId ? Number.parseInt(categoryId) : undefined,
           startDate: startDate || undefined,
@@ -89,7 +89,25 @@ export async function POST(request: Request) {
     // Use database if available, otherwise fallback to mock data
     if (sql) {
       try {
+        // Obtener la cuenta para calcular el nuevo balance
+        const accounts = await dbQueries.getAccounts(true)
+        const account = accounts.find(a => a.id === newTransactionData.account_id)
+        
+        if (!account) {
+          return NextResponse.json({ error: "Cuenta no encontrada" }, { status: 404 })
+        }
+        
+        // Crear la transacción
         newTransaction = await dbQueries.createTransaction(newTransactionData)
+        
+        // Calcular el nuevo balance
+        const newBalance =
+          newTransactionData.type === "ingreso"
+            ? account.balance + newTransactionData.amount
+            : account.balance - newTransactionData.amount
+        
+        // Actualizar el balance de la cuenta
+        await dbQueries.updateAccount(newTransactionData.account_id, { balance: newBalance })
       } catch (error) {
         console.error("[v0] Database error, falling back to mock data:", error)
         // Fallback to mock data creation

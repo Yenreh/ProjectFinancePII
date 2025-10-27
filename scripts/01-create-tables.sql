@@ -16,7 +16,7 @@ CREATE TABLE IF NOT EXISTS accounts (
   name TEXT NOT NULL,
   account_type TEXT NOT NULL CHECK (account_type IN ('efectivo', 'banco', 'tarjeta')),
   balance NUMERIC(18,2) NOT NULL DEFAULT 0,
-  currency VARCHAR(3) NOT NULL DEFAULT 'USD',
+  currency VARCHAR(3) NOT NULL DEFAULT 'COP',
   is_archived BOOLEAN NOT NULL DEFAULT FALSE,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()

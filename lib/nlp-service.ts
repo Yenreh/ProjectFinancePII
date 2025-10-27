@@ -109,7 +109,7 @@ const CORRECTION_KEYWORDS = [
  * Categorías comunes y sus variaciones
  */
 const CATEGORY_MAPPINGS: Record<string, string[]> = {
-  Alimentos: [
+  Alimentación: [
     "comida",
     "almuerzo",
     "desayuno",
@@ -120,6 +120,7 @@ const CATEGORY_MAPPINGS: Record<string, string[]> = {
     "mercado",
     "supermercado",
     "alimentos",
+    "alimentación",
     "bebidas",
   ],
   Transporte: [
@@ -131,6 +132,14 @@ const CATEGORY_MAPPINGS: Record<string, string[]> = {
     "combustible",
     "parqueadero",
     "peaje",
+  ],
+  Vivienda: [
+    "vivienda",
+    "arriendo",
+    "alquiler",
+    "renta",
+    "casa",
+    "apartamento",
   ],
   Servicios: [
     "servicios",
@@ -152,9 +161,13 @@ const CATEGORY_MAPPINGS: Record<string, string[]> = {
   ],
   Salud: ["salud", "medicina", "doctor", "hospital", "farmacia", "medicamentos"],
   Educación: ["educación", "curso", "libro", "universidad", "colegio", "estudio"],
+  Compras: ["compras", "compra", "compré", "ropa", "zapatos", "tienda"],
   Salario: ["salario", "sueldo", "pago", "nómina", "quincena"],
+  Freelance: ["freelance", "trabajo independiente", "proyecto"],
+  Inversiones: ["inversiones", "inversión", "dividendos", "rendimiento"],
   Ventas: ["venta", "vendí", "vendo"],
-  Otros: ["otro", "varios", "misceláneos"],
+  "Otros Gastos": ["otro", "varios", "misceláneos", "otro gasto"],
+  "Otros Ingresos": ["otro ingreso", "otros ingresos", "otro"],
 }
 
 /**
@@ -175,16 +188,19 @@ function extractAmount(text: string): number | undefined {
 
   // Patrones para detectar montos
   const patterns = [
-    // "50000 pesos" o "50.000 pesos"
-    /(\d{1,3}(?:[.,]\d{3})*(?:[.,]\d{2})?)\s*(?:pesos?|cop|$|dólares?|usd)?/i,
-    // "cincuenta mil pesos"
+    // Números con separadores: "50.000" o "50,000" o "50 000"
+    /(\d{1,3}(?:[.,\s]\d{3})+(?:[.,]\d{2})?)\s*(?:pesos?|cop|$|dólares?|usd)?/i,
+    // Números sin separadores: "50000" o "1500000"
+    /(\d{4,})\s*(?:pesos?|cop|$|dólares?|usd)?/i,
+    // "cincuenta mil" o "50 mil"
     /(\d+)\s*(?:mil|millones?|k|m)/i,
   ]
 
   for (const pattern of patterns) {
     const match = normalizedText.match(pattern)
     if (match) {
-      let amount = match[1].replace(/[.,]/g, "")
+      // Remover puntos, comas y espacios del número capturado
+      let amount = match[1].replace(/[.,\s]/g, "")
       
       // Convertir palabras a números
       if (normalizedText.includes("mil")) {
