@@ -9,6 +9,7 @@ Una aplicación web moderna y elegante para gestionar tus finanzas personales de
 
 ## 🌟 Características Principales
 
+- **🎤 Asistente de Voz** _(NUEVO)_: Registra transacciones usando comandos de voz naturales
 - **📊 Dashboard Interactivo**: Visualiza tus métricas financieras principales de un vistazo
 - **💳 Gestión de Cuentas**: Administra múltiples cuentas bancarias, efectivo y tarjetas de crédito
 - **💸 Control de Transacciones**: Registra y categoriza ingresos y gastos
@@ -38,6 +39,7 @@ Este proyecto está construido con tecnologías modernas y probadas:
 - **Base de Datos**: [PostgreSQL](https://www.postgresql.org/) via [Neon](https://neon.tech/)
 - **Formularios**: [React Hook Form](https://react-hook-form.com/) + [Zod](https://zod.dev/)
 - **Analytics**: [Vercel Analytics](https://vercel.com/analytics)
+- **Voz**: [Web Speech API](https://developer.mozilla.org/en-US/docs/Web/API/Web_Speech_API) + [ElevenLabs](https://elevenlabs.io/)
 
 ## 📋 Requisitos Previos
 
@@ -74,9 +76,14 @@ Crea un archivo `.env.local` en la raíz del proyecto:
 ```bash
 # Opcional - Solo si quieres usar base de datos real
 DATABASE_URL="postgresql://user:password@host:5432/database"
+
+# Opcional - Solo si quieres usar el asistente de voz con síntesis de audio
+ELEVEN_LABS_API_KEY="tu_api_key_de_elevenlabs"
 ```
 
-**Nota**: Si no configuras `DATABASE_URL`, la aplicación funcionará con datos de demostración en memoria.
+**Nota**: 
+- Si no configuras `DATABASE_URL`, la aplicación funcionará con datos de demostración en memoria.
+- Si no configuras `ELEVEN_LABS_API_KEY`, el asistente de voz funcionará solo con transcripción (sin síntesis de voz).
 
 ### 4. Configurar Base de Datos (Opcional)
 
@@ -124,6 +131,20 @@ npm run lint         # Ejecuta ESLint para verificar el código
 ```
 
 ## 📱 Uso de la Aplicación
+
+### 🎤 Asistente de Voz (NUEVO)
+
+Registra transacciones usando tu voz:
+1. Busca el botón flotante de micrófono (esquina inferior derecha)
+2. Presiona para activar el asistente
+3. Di un comando como: "gasté 50000 pesos en comida"
+4. Confirma la transacción
+
+**Comandos soportados**:
+- Gastos: "gasté 50000 en comida", "pagué 80000 en transporte"
+- Ingresos: "recibí 1000000 de salario", "cobré 500000"
+
+📖 **Más información**: Ver [Guía del Asistente de Voz](VOICE_ASSISTANT_README.md)
 
 ### Dashboard
 
@@ -176,6 +197,7 @@ Este proyecto está optimizado para desplegarse en [Vercel](https://vercel.com/)
 
 3. **Variables de Entorno** (opcional):
    - Añade `DATABASE_URL` si usas base de datos
+   - Añade `ELEVEN_LABS_API_KEY` si quieres síntesis de voz
    - Click en "Deploy"
 
 4. **Despliegue**:
@@ -220,7 +242,8 @@ FinanzasPersonales-PyI-II/
 │   │   ├── categories/           # Endpoints de categorías
 │   │   ├── transactions/         # Endpoints de transacciones
 │   │   ├── dashboard/            # Endpoints de métricas
-│   │   └── reports/              # Endpoints de reportes
+│   │   ├── reports/              # Endpoints de reportes
+│   │   └── voice/                # Endpoints de asistente de voz
 │   ├── cuentas/                  # Página de gestión de cuentas
 │   ├── transacciones/            # Página de transacciones
 │   ├── reportes/                 # Página de reportes
@@ -234,12 +257,17 @@ FinanzasPersonales-PyI-II/
 │   ├── dashboard/                # Componentes del dashboard
 │   ├── reports/                  # Componentes de reportes
 │   ├── layout/                   # Componentes de navegación
+│   ├── voice/                    # Componentes del asistente de voz
 │   └── ui/                       # Componentes UI base (Radix)
 ├── lib/                          # Utilidades y lógica de negocio
 │   ├── db.ts                     # Queries de base de datos
 │   ├── mock-data.ts              # Datos de demostración
 │   ├── types.ts                  # Tipos TypeScript
 │   ├── format.ts                 # Funciones de formateo
+│   ├── nlp-service.ts            # Servicio de procesamiento de lenguaje natural
+│   ├── voice-types.ts            # Tipos para asistente de voz
+│   ├── hooks/                    # Custom React Hooks
+│   │   └── use-voice-recorder.ts # Hook de grabación de voz
 │   └── utils.ts                  # Utilidades generales
 ├── scripts/                      # Scripts de utilidad
 │   ├── 01-create-tables.sql      # Schema de base de datos
@@ -307,6 +335,9 @@ Verifica que no hay errores de TypeScript o durante el build.
 - [Guía para Desarrolladores](docs/DEVELOPER_GUIDE.md)
 - [Guía de Despliegue](docs/DEPLOYMENT.md)
 - [Guía de Contribución](docs/CONTRIBUTING.md)
+- **[🎤 Asistente de Voz](VOICE_ASSISTANT_README.md)** _(NUEVO)_
+- **[Documentación Técnica del Asistente](docs/VOICE_ASSISTANT_IMPLEMENTATION.md)** _(NUEVO)_
+- **[Ejemplos de Comandos de Voz](VOICE_EXAMPLES.md)** _(NUEVO)_
 
 ## 🐛 Reportar Problemas
 

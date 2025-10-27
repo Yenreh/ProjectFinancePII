@@ -8,6 +8,7 @@ import { MetricCard } from "@/components/dashboard/metric-card"
 import { RecentTransactions } from "@/components/dashboard/recent-transactions"
 import { AccountsSummary } from "@/components/dashboard/accounts-summary"
 import { QuickTransactionButtons } from "@/components/transactions/quick-transaction-buttons"
+import { VoiceAssistantButton } from "@/components/voice/voice-assistant-button"
 import { formatCurrency } from "@/lib/format"
 import type { DashboardMetrics } from "@/lib/types"
 
@@ -82,6 +83,9 @@ export default function DashboardPage() {
       </main>
 
       <MobileNav />
+      
+      {/* Asistente de voz flotante */}
+      <VoiceAssistantButton onTransactionCreated={fetchMetrics} />
     </div>
   )
 }
