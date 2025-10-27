@@ -6,15 +6,22 @@ import Link from "next/link"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { TransactionItem } from "@/components/transactions/transaction-item"
+import { TransactionFormDialog } from "@/components/transactions/transaction-form-dialog"
 import type { TransactionWithDetails } from "@/lib/types"
+import { useRouter } from "next/navigation"
+import { toast } from "sonner"
 
 interface RecentTransactionsProps {
   refreshTrigger?: number
+  onDataChange?: () => void
 }
 
-export function RecentTransactions({ refreshTrigger }: RecentTransactionsProps) {
+export function RecentTransactions({ refreshTrigger, onDataChange }: RecentTransactionsProps) {
   const [transactions, setTransactions] = useState<TransactionWithDetails[]>([])
   const [loading, setLoading] = useState(true)
+  const [editingTransaction, setEditingTransaction] = useState<TransactionWithDetails | null>(null)
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
+  const router = useRouter()
 
   useEffect(() => {
     async function fetchTransactions() {
@@ -32,8 +39,58 @@ export function RecentTransactions({ refreshTrigger }: RecentTransactionsProps) 
     fetchTransactions()
   }, [refreshTrigger])
 
+  const handleEdit = (transaction: TransactionWithDetails) => {
+    setEditingTransaction(transaction)
+    setIsEditDialogOpen(true)
+  }
+
+  const handleDelete = async (transaction: TransactionWithDetails) => {
+    if (!confirm(`¿Estás seguro de eliminar esta transacción?`)) {
+      return
+    }
+
+    try {
+      const response = await fetch(`/api/transactions/${transaction.id}`, {
+        method: "DELETE",
+      })
+
+      if (!response.ok) throw new Error("Error al eliminar")
+
+      toast.success("Transacción eliminada")
+      
+      // 1. Primero notificar al padre para que actualice métricas y cuentas
+      onDataChange?.()
+      
+      // 2. Luego actualizar la lista local de transacciones
+      const newResponse = await fetch("/api/transactions")
+      const data = await newResponse.json()
+      setTransactions(data.slice(0, 5))
+      
+      // 3. Finalmente hacer router.refresh para asegurar todo esté actualizado
+      router.refresh()
+    } catch (error) {
+      console.error("[v0] Error deleting transaction:", error)
+      toast.error("Error al eliminar la transacción")
+    }
+  }
+
+  const handleSuccess = () => {
+    // 1. Primero notificar al padre para actualización inmediata
+    onDataChange?.()
+    
+    // 2. Actualizar lista local de transacciones
+    fetch("/api/transactions")
+      .then((res) => res.json())
+      .then((data) => setTransactions(data.slice(0, 5)))
+      .catch((error) => console.error("[v0] Error refreshing transactions:", error))
+    
+    // 3. Router refresh para sincronización completa
+    router.refresh()
+  }
+
   return (
-    <Card>
+    <>
+      <Card>
       <CardHeader className="flex flex-row items-center justify-between">
         <CardTitle>Transacciones Recientes</CardTitle>
         <Button variant="ghost" size="sm" asChild>
@@ -51,11 +108,24 @@ export function RecentTransactions({ refreshTrigger }: RecentTransactionsProps) 
         ) : (
           <div className="space-y-2">
             {transactions.map((transaction) => (
-              <TransactionItem key={transaction.id} transaction={transaction} />
+              <TransactionItem 
+                key={transaction.id} 
+                transaction={transaction} 
+                onEdit={handleEdit}
+                onDelete={handleDelete}
+              />
             ))}
           </div>
         )}
       </CardContent>
     </Card>
+
+    <TransactionFormDialog
+      open={isEditDialogOpen}
+      onOpenChange={setIsEditDialogOpen}
+      transaction={editingTransaction}
+      onSuccess={handleSuccess}
+    />
+    </>
   )
 }

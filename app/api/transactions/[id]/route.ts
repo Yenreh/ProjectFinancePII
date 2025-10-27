@@ -2,12 +2,38 @@ import { NextResponse } from "next/server"
 import { dbQueries, sql } from "@/lib/db"
 import { mockTransactions } from "@/lib/mock-data"
 import type { Transaction } from "@/lib/types"
+import { 
+  validateNumber, 
+  revertTransactionEffect, 
+  calculateNewBalance,
+  formatBalanceForLog 
+} from "@/lib/balance-utils"
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await params
     const transactionId = Number.parseInt(id)
     const body = await request.json()
+
+    console.log("[Transaction PATCH] 📝 Original body:", body)
+
+    // Convertir y validar account_id
+    if (body.account_id !== undefined) {
+      body.account_id = Number(body.account_id)
+      if (isNaN(body.account_id)) {
+        return NextResponse.json({ error: "ID de cuenta inválido" }, { status: 400 })
+      }
+    }
+
+    // Convertir y validar amount
+    if (body.amount !== undefined) {
+      body.amount = Number(body.amount)
+      if (isNaN(body.amount) || body.amount <= 0) {
+        return NextResponse.json({ error: "Monto inválido" }, { status: 400 })
+      }
+    }
+
+    console.log("[Transaction PATCH] ✅ Processed body:", body)
 
     let updatedTransaction: Transaction
 
@@ -22,6 +48,13 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
           return NextResponse.json({ error: "Transacción no encontrada" }, { status: 404 })
         }
 
+        console.log("[Transaction PATCH] 📄 Original transaction:", {
+          id: originalTransaction.id,
+          type: originalTransaction.type,
+          amount: originalTransaction.amount,
+          account_id: originalTransaction.account_id
+        })
+
         // Obtener todas las cuentas
         const accounts = await dbQueries.getAccounts(true)
         const originalAccount = accounts.find(a => a.id === originalTransaction.account_id)
@@ -30,26 +63,35 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
           return NextResponse.json({ error: "Cuenta original no encontrada" }, { status: 404 })
         }
 
-        // Revertir el efecto de la transacción original
-        let accountBalance = originalAccount.balance
-        if (originalTransaction.type === "ingreso") {
-          accountBalance -= originalTransaction.amount
-        } else {
-          accountBalance += originalTransaction.amount
-        }
+        console.log("[Transaction PATCH] 💰 Original account balance:", formatBalanceForLog(originalAccount.balance))
 
-        // Actualizar la transacción
+        // Determinar los nuevos valores (usar valores actuales si no se proporcionan nuevos)
+        const newAccountId = body.account_id !== undefined ? body.account_id : originalTransaction.account_id
+        const newType = body.type !== undefined ? body.type : originalTransaction.type
+        const newAmount = body.amount !== undefined ? body.amount : validateNumber(originalTransaction.amount, "Original amount")
+
+        console.log("[Transaction PATCH] 🔄 New values:", { newAccountId, newType, newAmount })
+
+        // PASO 1: Revertir el efecto de la transacción original usando utilidades
+        const revertedBalance = revertTransactionEffect(
+          originalAccount.balance,
+          originalTransaction.amount,
+          originalTransaction.type
+        )
+
+        console.log("[Transaction PATCH] ⏮️  Reverted balance:", formatBalanceForLog(revertedBalance))
+
+        // PASO 2: Actualizar la transacción en la base de datos
         updatedTransaction = await dbQueries.updateTransaction(transactionId, body)
 
-        // Aplicar el efecto de la transacción actualizada
-        const newAccountId = body.account_id || originalTransaction.account_id
-        const newType = body.type || originalTransaction.type
-        const newAmount = body.amount !== undefined ? Number.parseFloat(body.amount) : originalTransaction.amount
-
-        // Si la cuenta cambió, necesitamos actualizar ambas cuentas
+        // PASO 3: Aplicar el efecto de la nueva transacción
         if (newAccountId !== originalTransaction.account_id) {
-          // Actualizar la cuenta original (ya revertimos el efecto)
-          await dbQueries.updateAccount(originalTransaction.account_id, { balance: accountBalance })
+          // Caso A: La cuenta cambió - actualizar ambas cuentas
+          console.log("[Transaction PATCH] 🔀 Account changed from", originalTransaction.account_id, "to", newAccountId)
+          
+          // Guardar el balance revertido en la cuenta original
+          await dbQueries.updateAccount(originalTransaction.account_id, { balance: revertedBalance })
+          console.log("[Transaction PATCH] ✅ Updated original account to:", formatBalanceForLog(revertedBalance))
           
           // Obtener la nueva cuenta
           const newAccount = accounts.find(a => a.id === newAccountId)
@@ -57,19 +99,29 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
             return NextResponse.json({ error: "Nueva cuenta no encontrada" }, { status: 404 })
           }
           
-          // Aplicar el efecto en la nueva cuenta
-          const newAccountBalance = newType === "ingreso"
-            ? newAccount.balance + newAmount
-            : newAccount.balance - newAmount
+          // Aplicar el efecto en la nueva cuenta usando utilidades
+          const newAccountBalance = calculateNewBalance(
+            newAccount.balance,
+            newAmount,
+            newType
+          )
           
+          console.log("[Transaction PATCH] 💰 New account balance:", formatBalanceForLog(newAccountBalance))
           await dbQueries.updateAccount(newAccountId, { balance: newAccountBalance })
+          console.log("[Transaction PATCH] ✅ Updated new account to:", formatBalanceForLog(newAccountBalance))
         } else {
-          // Misma cuenta, aplicar el efecto de la transacción actualizada
-          const finalBalance = newType === "ingreso"
-            ? accountBalance + newAmount
-            : accountBalance - newAmount
+          // Caso B: Misma cuenta - aplicar el efecto de la nueva transacción sobre el balance revertido
+          console.log("[Transaction PATCH] 🔁 Same account, applying changes")
           
+          const finalBalance = calculateNewBalance(
+            revertedBalance,
+            newAmount,
+            newType
+          )
+          
+          console.log("[Transaction PATCH] ⚖️  Final balance (same account):", formatBalanceForLog(finalBalance))
           await dbQueries.updateAccount(originalTransaction.account_id, { balance: finalBalance })
+          console.log("[Transaction PATCH] ✅ Updated account to:", formatBalanceForLog(finalBalance))
         }
 
       } catch (error) {
@@ -114,6 +166,8 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
     const { id } = await params
     const transactionId = Number.parseInt(id)
 
+    console.log("[Transaction DELETE] 🗑️  Deleting transaction ID:", transactionId)
+
     // Use database if available, otherwise fallback to mock data
     if (sql) {
       try {
@@ -125,6 +179,13 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
           return NextResponse.json({ error: "Transacción no encontrada" }, { status: 404 })
         }
 
+        console.log("[Transaction DELETE] 📄 Transaction to delete:", {
+          id: transaction.id,
+          type: transaction.type,
+          amount: transaction.amount,
+          account_id: transaction.account_id
+        })
+
         // Obtener la cuenta
         const accounts = await dbQueries.getAccounts(true)
         const account = accounts.find(a => a.id === transaction.account_id)
@@ -133,19 +194,28 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
           return NextResponse.json({ error: "Cuenta no encontrada" }, { status: 404 })
         }
 
-        // Revertir el efecto de la transacción en el balance
-        const newBalance = transaction.type === "ingreso"
-          ? account.balance - transaction.amount
-          : account.balance + transaction.amount
+        console.log("[Transaction DELETE] 💰 Account balance before:", formatBalanceForLog(account.balance))
+
+        // Revertir el efecto de la transacción usando utilidades
+        const newBalance = revertTransactionEffect(
+          account.balance,
+          transaction.amount,
+          transaction.type
+        )
+
+        console.log("[Transaction DELETE] ⚖️  New balance after revert:", formatBalanceForLog(newBalance))
 
         // Actualizar el balance de la cuenta
         await dbQueries.updateAccount(transaction.account_id, { balance: newBalance })
+        console.log("[Transaction DELETE] ✅ Updated account balance to:", formatBalanceForLog(newBalance))
 
         // Eliminar la transacción
         const success = await dbQueries.deleteTransaction(transactionId)
         if (!success) {
           return NextResponse.json({ error: "Error al eliminar transacción" }, { status: 500 })
         }
+
+        console.log("[Transaction DELETE] ✅ Transaction deleted successfully")
       } catch (error) {
         console.error("[v0] Database error, falling back to mock data:", error)
         // Fallback to mock data deletion

@@ -79,7 +79,7 @@ export default function DashboardPage() {
             </div>
 
             <div className="grid gap-6 lg:grid-cols-2">
-              <RecentTransactions refreshTrigger={refreshTrigger} />
+              <RecentTransactions refreshTrigger={refreshTrigger} onDataChange={handleDataRefresh} />
               <AccountsSummary refreshTrigger={refreshTrigger} />
             </div>
           </>

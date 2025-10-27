@@ -34,12 +34,14 @@ export async function POST(request: NextRequest) {
       console.log('[Voice] Procesando respuesta a pregunta pendiente:', transcription)
       console.log('[Voice] Comando pendiente:', pendingCommand)
       
-      // Parsear la nueva entrada para extraer la cuenta
-      const newParsed = parseVoiceCommand(transcription)
+      // Parsear la nueva entrada para extraer la cuenta o categoría (PASAR BD)
+      const newParsed = parseVoiceCommand(transcription, categories, accounts)
       
-      // Combinar: tomar cuenta de la nueva respuesta, resto del comando pendiente
+      // Combinar: tomar cuenta/categoría de la nueva respuesta, resto del comando pendiente
       const combined = {
         ...pendingCommand,
+        categoryName: newParsed.categoryName || pendingCommand.categoryName,
+        categoryId: newParsed.categoryId || pendingCommand.categoryId,
         accountName: newParsed.accountName || pendingCommand.accountName,
         accountId: newParsed.accountId || pendingCommand.accountId,
         originalText: `${pendingCommand.originalText} + ${transcription}`,
@@ -71,7 +73,7 @@ export async function POST(request: NextRequest) {
           parsedCommand: enriched,
           needsConfirmation: false,
           needsAdditionalInfo: true,  // Aún esperando más información
-          suggestions: generateSuggestions(enriched),
+          suggestions: generateSuggestions(enriched, categories, accounts),
         }
         
         return NextResponse.json(result)
@@ -80,7 +82,7 @@ export async function POST(request: NextRequest) {
 
     // Si es una corrección, aplicarla al comando original
     if (isCorrection && originalCommand && transcription) {
-      const correction = detectCorrection(transcription)
+      const correction = detectCorrection(transcription, categories, accounts)
       
       if (correction.isCorrection) {
         const corrected = applyCorrection(originalCommand, correction)
@@ -104,7 +106,7 @@ export async function POST(request: NextRequest) {
             message: `Corrección incompleta. ${backendValidation.errors.join(", ")}`,
             parsedCommand: enriched,
             needsConfirmation: false,
-            suggestions: generateSuggestions(enriched),
+            suggestions: generateSuggestions(enriched, categories, accounts),
           }
           
           return NextResponse.json(result)
@@ -117,8 +119,8 @@ export async function POST(request: NextRequest) {
       return await processConfirmedTransaction(parsedData)
     }
 
-    // Analizar el comando de voz
-    let parsed = parseVoiceCommand(transcription)
+    // Analizar el comando de voz (PASAR CATEGORÍAS Y CUENTAS DE LA BD)
+    let parsed = parseVoiceCommand(transcription, categories, accounts)
     
     // Si es una consulta, procesarla directamente
     if (parsed.intention === "consulta") {
@@ -160,12 +162,22 @@ export async function POST(request: NextRequest) {
     }
 
     // Si falta información, solicitar más datos
-    const suggestions = generateSuggestions(parsed)
+    const suggestions = generateSuggestions(parsed, categories, accounts)
     const allErrors = [...validation.missingFields, ...backendValidation.errors]
+
+    // Crear mensaje de error más específico
+    let errorMessage = "Me falta información. "
+    if (validation.missingFields.includes("categoría")) {
+      errorMessage = "No identifiqué la categoría. "
+    } else if (validation.missingFields.includes("monto")) {
+      errorMessage = "No entendí el monto. "
+    } else if (validation.missingFields.includes("tipo de transacción")) {
+      errorMessage = "No sé si es ingreso o gasto. "
+    }
 
     const result: VoiceProcessingResult = {
       success: false,
-      message: `Me falta información. ${allErrors.join(", ")}`,
+      message: errorMessage,
       parsedCommand: parsed,
       needsConfirmation: false,
       suggestions,

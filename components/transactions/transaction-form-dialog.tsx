@@ -70,7 +70,7 @@ export function TransactionFormDialog({
         category_id: transaction.category_id,
         amount: transaction.amount.toString(),
         description: transaction.description || "",
-        date: transaction.date,
+        date: formatDateInput(transaction.date),
       })
     } else {
       setFormData({

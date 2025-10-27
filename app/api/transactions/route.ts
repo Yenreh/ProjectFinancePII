@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { dbQueries, sql } from "@/lib/db"
 import { mockTransactions, createMockTransactionsWithDetails } from "@/lib/mock-data"
 import type { Transaction, TransactionWithDetails } from "@/lib/types"
+import { validateNumber, calculateNewBalance, formatBalanceForLog } from "@/lib/balance-utils"
 
 export async function GET(request: Request) {
   try {
@@ -66,6 +67,8 @@ export async function POST(request: Request) {
     const body = await request.json()
     const { account_id, category_id, type, amount, description, date } = body
 
+    console.log("[Transaction POST] 📝 Received data:", { account_id, category_id, type, amount, date })
+
     // Validation
     if (!account_id || !category_id || !type || !amount || !date) {
       return NextResponse.json({ error: "Datos incompletos" }, { status: 400 })
@@ -75,14 +78,33 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Tipo de transacción inválido" }, { status: 400 })
     }
 
+    // Convertir y validar datos usando utilidades
+    const accountIdNum = validateNumber(account_id, "ID de cuenta")
+    const categoryIdNum = validateNumber(category_id, "ID de categoría")
+    const amountNum = validateNumber(amount, "Monto")
+
+    if (accountIdNum <= 0) {
+      return NextResponse.json({ error: "ID de cuenta debe ser mayor a 0" }, { status: 400 })
+    }
+
+    if (categoryIdNum <= 0) {
+      return NextResponse.json({ error: "ID de categoría debe ser mayor a 0" }, { status: 400 })
+    }
+
+    if (amountNum <= 0) {
+      return NextResponse.json({ error: "Monto debe ser mayor a 0" }, { status: 400 })
+    }
+
     const newTransactionData = {
-      account_id: Number.parseInt(account_id),
-      category_id: Number.parseInt(category_id),
+      account_id: accountIdNum,
+      category_id: categoryIdNum,
       type,
-      amount: Number.parseFloat(amount),
+      amount: amountNum,
       description: description || null,
       date,
     }
+
+    console.log("[Transaction POST] ✅ Validated data:", newTransactionData)
 
     let newTransaction: Transaction
 
@@ -96,18 +118,24 @@ export async function POST(request: Request) {
         if (!account) {
           return NextResponse.json({ error: "Cuenta no encontrada" }, { status: 404 })
         }
+
+        console.log("[Transaction POST] 💰 Account balance before:", formatBalanceForLog(account.balance))
         
         // Crear la transacción
         newTransaction = await dbQueries.createTransaction(newTransactionData)
         
-        // Calcular el nuevo balance
-        const newBalance =
-          newTransactionData.type === "ingreso"
-            ? account.balance + newTransactionData.amount
-            : account.balance - newTransactionData.amount
+        // Calcular el nuevo balance usando utilidades
+        const newBalance = calculateNewBalance(
+          account.balance,
+          newTransactionData.amount,
+          newTransactionData.type
+        )
+
+        console.log("[Transaction POST] ⚖️  New balance after:", formatBalanceForLog(newBalance))
         
         // Actualizar el balance de la cuenta
         await dbQueries.updateAccount(newTransactionData.account_id, { balance: newBalance })
+        console.log("[Transaction POST] ✅ Updated account balance to:", formatBalanceForLog(newBalance))
       } catch (error) {
         console.error("[v0] Database error, falling back to mock data:", error)
         // Fallback to mock data creation

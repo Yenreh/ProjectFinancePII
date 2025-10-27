@@ -18,11 +18,13 @@ const INTENTION_KEYWORDS: IntentionKeywords = {
     "recibí",
     "recibo",
     "gané",
+    "gane",
     "me dieron",
     "me pagaron",
     "ingresó",
     "ingreso",
     "cobré",
+    "cobre",
     "cobro",
     "entrada",
     "deposito",
@@ -34,21 +36,29 @@ const INTENTION_KEYWORDS: IntentionKeywords = {
   ],
   gasto: [
     "gasté",
+    "gaste",
     "gasto",
     "compré",
+    "compre",
     "compro",
     "pagué",
+    "pague",
     "pago",
     "salida",
     "egreso",
     "di",
     "entregué",
+    "entregue",
     "consumí",
+    "consumi",
     "invertí",
+    "inverti",
     "me gasté",
+    "me gaste",
     "se me fue",
     "se me fueron",
     "salió",
+    "salio",
     "salieron",
   ],
   consulta: [
@@ -61,6 +71,7 @@ const INTENTION_KEYWORDS: IntentionKeywords = {
     "estado",
     "consulta",
     "último",
+    "ultimo",
     "ultima",
     "cual fue",
     "cuál fue",
@@ -180,6 +191,7 @@ const ACCOUNT_MAPPINGS: Record<string, string[]> = {
   Nu: ["nu", "en nu", "cuenta nu", "en nubank", "nubank", "cuenta nubank"],
   Bancolombia: ["bancolombia", "en bancolombia"],
   Nequi: ["nequi", "en nequi"],
+  "Caja Social": ["caja social", "en caja social"],
 }
 
 /**
@@ -339,32 +351,139 @@ function detectControlType(text: string): ControlType {
 }
 
 /**
- * Extrae la categoría del texto
+ * Extrae la categoría del texto - puede recibir categorías desde la BD
  */
-function extractCategory(text: string): string | undefined {
-  const normalizedText = text.toLowerCase()
+function extractCategory(text: string, dbCategories?: Category[]): string | undefined {
+  const normalizedText = text.toLowerCase().trim()
+  console.log("[NLP] 🔍 Extracting category from:", normalizedText)
 
+  // Si dice "en X" o "de X", extraer X primero
+  const prefixMatch = normalizedText.match(/(?:en|de)\s+([a-záéíóúñ\s]+)/i)
+  const categoryWord = prefixMatch ? prefixMatch[1].trim() : normalizedText
+
+  console.log("[NLP] 📝 Category word to search:", categoryWord)
+
+  // 1. PRIMERO: Intentar match con categorías de la BD (si están disponibles)
+  if (dbCategories && dbCategories.length > 0) {
+    console.log("[NLP] 🗄️ Searching in DB categories:", dbCategories.map(c => c.name))
+    
+    // Match exacto
+    const exactMatch = dbCategories.find(
+      (c) => c.name.toLowerCase() === categoryWord
+    )
+    if (exactMatch) {
+      console.log("[NLP] ✅ DB Category match (exact):", exactMatch.name)
+      return exactMatch.name
+    }
+
+    // Match parcial (contiene la palabra)
+    const partialMatch = dbCategories.find(
+      (c) => c.name.toLowerCase().includes(categoryWord) || 
+             categoryWord.includes(c.name.toLowerCase())
+    )
+    if (partialMatch) {
+      console.log("[NLP] ✅ DB Category match (partial):", partialMatch.name)
+      return partialMatch.name
+    }
+
+    // Match por palabras (ej: "otros gastos" = "Otros Gastos")
+    const words = categoryWord.split(/\s+/)
+    const wordMatch = dbCategories.find((c) => {
+      const catWords = c.name.toLowerCase().split(/\s+/)
+      return words.every(w => catWords.some(cw => cw.includes(w) || w.includes(cw)))
+    })
+    if (wordMatch) {
+      console.log("[NLP] ✅ DB Category match (words):", wordMatch.name)
+      return wordMatch.name
+    }
+  }
+
+  // 2. SEGUNDO: Buscar en mappings predefinidos
+  console.log("[NLP] 🔍 Searching in predefined mappings...")
+  
+  // Match exacto con nombre de categoría del mapping
   for (const [category, keywords] of Object.entries(CATEGORY_MAPPINGS)) {
-    if (keywords.some((keyword) => normalizedText.includes(keyword))) {
+    if (categoryWord === category.toLowerCase()) {
+      console.log("[NLP] ✅ Mapping match (exact):", category)
+      return category
+    }
+  }
+  
+  // Match con keywords
+  for (const [category, keywords] of Object.entries(CATEGORY_MAPPINGS)) {
+    if (keywords.some((keyword) => 
+      categoryWord.includes(keyword) || keyword.includes(categoryWord)
+    )) {
+      console.log("[NLP] ✅ Mapping match (keyword):", category, "from keyword")
       return category
     }
   }
 
+  console.log("[NLP] ❌ No category found")
   return undefined
 }
 
 /**
- * Extrae el nombre de la cuenta
+ * Extrae el nombre de la cuenta - puede recibir cuentas desde la BD
  */
-function extractAccount(text: string): string | undefined {
-  const normalizedText = text.toLowerCase()
+function extractAccount(text: string, dbAccounts?: Account[]): string | undefined {
+  const normalizedText = text.toLowerCase().trim()
+  console.log("[NLP] 🔍 Extracting account from:", normalizedText)
 
+  // Extraer nombre después de "en", "de", "desde" o "con"
+  const prefixMatch = normalizedText.match(/(?:en|de|desde|con)\s+([a-záéíóúñ\s]+)/i)
+  const accountWord = prefixMatch ? prefixMatch[1].trim() : normalizedText
+
+  console.log("[NLP] 💳 Account word to search:", accountWord)
+
+  // 1. PRIMERO: Intentar match con cuentas de la BD (si están disponibles)
+  if (dbAccounts && dbAccounts.length > 0) {
+    console.log("[NLP] 🗄️ Searching in DB accounts:", dbAccounts.map(a => a.name))
+    
+    // Match exacto
+    const exactMatch = dbAccounts.find(
+      (a) => a.name.toLowerCase() === accountWord
+    )
+    if (exactMatch) {
+      console.log("[NLP] ✅ DB Account match (exact):", exactMatch.name)
+      return exactMatch.name
+    }
+
+    // Match parcial (contiene la palabra)
+    const partialMatch = dbAccounts.find(
+      (a) => a.name.toLowerCase().includes(accountWord) || 
+             accountWord.includes(a.name.toLowerCase())
+    )
+    if (partialMatch) {
+      console.log("[NLP] ✅ DB Account match (partial):", partialMatch.name)
+      return partialMatch.name
+    }
+
+    // Match por palabras
+    const words = accountWord.split(/\s+/)
+    const wordMatch = dbAccounts.find((a) => {
+      const accWords = a.name.toLowerCase().split(/\s+/)
+      return words.every(w => accWords.some(aw => aw.includes(w) || w.includes(aw)))
+    })
+    if (wordMatch) {
+      console.log("[NLP] ✅ DB Account match (words):", wordMatch.name)
+      return wordMatch.name
+    }
+  }
+
+  // 2. SEGUNDO: Buscar en mappings predefinidos
+  console.log("[NLP] 🔍 Searching in predefined account mappings...")
+  
   for (const [account, keywords] of Object.entries(ACCOUNT_MAPPINGS)) {
-    if (keywords.some((keyword) => normalizedText.includes(keyword))) {
+    if (keywords.some((keyword) => 
+      accountWord.includes(keyword) || keyword.includes(accountWord)
+    )) {
+      console.log("[NLP] ✅ Account mapping match:", account)
       return account
     }
   }
 
+  console.log("[NLP] ❌ No account found")
   return undefined
 }
 
@@ -407,12 +526,17 @@ function calculateConfidence(parsed: Partial<ParsedVoiceCommand>): ConfidenceLev
 
 /**
  * Analiza un comando de voz y extrae la información relevante
+ * Ahora puede recibir categorías y cuentas de la BD para mejor reconocimiento
  */
-export function parseVoiceCommand(transcription: string): ParsedVoiceCommand {
+export function parseVoiceCommand(
+  transcription: string,
+  dbCategories?: Category[],
+  dbAccounts?: Account[]
+): ParsedVoiceCommand {
   const intention = detectIntention(transcription)
   const amount = extractAmount(transcription)
-  const categoryName = extractCategory(transcription)
-  const accountName = extractAccount(transcription)
+  const categoryName = extractCategory(transcription, dbCategories)
+  const accountName = extractAccount(transcription, dbAccounts)
   const description = extractDescription(transcription, amount, categoryName)
 
   const parsed: ParsedVoiceCommand = {
@@ -502,28 +626,50 @@ export function generateConfirmationMessage(parsed: ParsedVoiceCommand): string 
 
 /**
  * Genera sugerencias cuando falta información (HU-013: Mejorado)
+ * Ahora usa categorías y cuentas reales de la BD
  */
-export function generateSuggestions(parsed: ParsedVoiceCommand): string[] {
+export function generateSuggestions(
+  parsed: ParsedVoiceCommand,
+  dbCategories?: Category[],
+  dbAccounts?: Account[]
+): string[] {
   const suggestions: string[] = []
   const validation = validateParsedCommand(parsed)
 
   if (!validation.valid) {
     // HU-013: Mensajes más específicos y contextuales
+    // Las sugerencias deben ser frases cortas para lectura en voz (se usa con "Puedes decir: ...")
     if (validation.missingFields.includes("monto")) {
-      suggestions.push("No entendí el monto. Di algo como: 'gasté 50000 pesos' o 'recibí 100000'")
+      suggestions.push("gasté 50000 pesos")
+      suggestions.push("recibí 100000")
     }
 
     if (validation.missingFields.includes("categoría")) {
-      suggestions.push(
-        "No identifiqué la categoría. Intenta con: 'en alimentos', 'en transporte', 'en servicios', o 'de salario'"
-      )
+      // Si tenemos categorías de la BD, sugerir esas
+      if (dbCategories && dbCategories.length > 0) {
+        dbCategories.slice(0, 4).forEach(c => {
+          suggestions.push(`en ${c.name.toLowerCase()}`)
+        })
+      } else {
+        // Fallback a sugerencias genéricas
+        suggestions.push("en alimentos")
+        suggestions.push("en transporte")
+        suggestions.push("en servicios")
+        suggestions.push("de salario")
+      }
     }
 
     if (validation.missingFields.includes("tipo de transacción")) {
-      suggestions.push(
-        "No sé si es ingreso o gasto. Di 'gasté' para gastos o 'recibí' para ingresos"
-      )
+      suggestions.push("gasté 50000")
+      suggestions.push("recibí 100000")
     }
+  }
+
+  // Si falta cuenta y hay varias disponibles
+  if (!parsed.accountId && dbAccounts && dbAccounts.length > 1) {
+    dbAccounts.slice(0, 3).forEach(a => {
+      suggestions.push(`en ${a.name.toLowerCase()}`)
+    })
   }
 
   // HU-013: Sugerencias adicionales si el comando es ambiguo
@@ -536,15 +682,29 @@ export function generateSuggestions(parsed: ParsedVoiceCommand): string[] {
 
 /**
  * Detecta si el comando es una corrección
+ * Ahora puede recibir categorías y cuentas de la BD para mejor reconocimiento
  */
-export function detectCorrection(text: string): CorrectionCommand {
+export function detectCorrection(
+  text: string, 
+  dbCategories?: Category[], 
+  dbAccounts?: Account[]
+): CorrectionCommand {
   const normalizedText = text.toLowerCase()
+  console.log("[NLP] 🔄 Detecting correction in:", normalizedText)
   
-  const isCorrection = CORRECTION_KEYWORDS.some((keyword) => 
+  // Detectar si es una corrección explícita o simplemente está especificando una categoría
+  const isExplicitCorrection = CORRECTION_KEYWORDS.some((keyword) => 
     normalizedText.includes(keyword)
   )
 
-  if (!isCorrection) {
+  // También detectar si solo está diciendo una categoría (como "en alimentos")
+  const hasOnlyCategory = /^(?:en|de)\s+[a-záéíóúñ\s]+/i.test(normalizedText) || 
+                          /^[a-záéíóúñ\s]+$/i.test(normalizedText.trim())
+
+  console.log("[NLP] 🔍 isExplicitCorrection:", isExplicitCorrection, "hasOnlyCategory:", hasOnlyCategory)
+
+  if (!isExplicitCorrection && !hasOnlyCategory) {
+    console.log("[NLP] ❌ Not a correction")
     return {
       isCorrection: false,
       originalText: text,
@@ -555,25 +715,46 @@ export function detectCorrection(text: string): CorrectionCommand {
   let field: CorrectionCommand["field"]
   let newValue: string | number | undefined
 
-  // Corrección de monto
-  const amount = extractAmount(text)
-  if (amount) {
-    field = "amount"
-    newValue = amount
-  }
-  
-  // Corrección de categoría
-  const category = extractCategory(text)
-  if (category && !field) {
+  // 1. Primero verificar categoría (tiene prioridad en correcciones)
+  const category = extractCategory(text, dbCategories)
+  if (category) {
     field = "category"
     newValue = category
+    console.log("[NLP] ✅ Detected category correction:", category)
+  }
+  
+  // 2. Corrección de monto (solo si no se detectó categoría)
+  if (!field) {
+    const amount = extractAmount(text)
+    if (amount) {
+      field = "amount"
+      newValue = amount
+      console.log("[NLP] ✅ Detected amount correction:", amount)
+    }
   }
 
-  // Corrección de tipo (ingreso/gasto)
-  const intention = detectIntention(text)
-  if ((intention === "ingreso" || intention === "gasto") && !field) {
-    field = "type"
-    newValue = intention
+  // 3. Corrección de tipo (ingreso/gasto)
+  if (!field) {
+    const intention = detectIntention(text)
+    if (intention === "ingreso" || intention === "gasto") {
+      field = "type"
+      newValue = intention
+      console.log("[NLP] ✅ Detected type correction:", intention)
+    }
+  }
+
+  // 4. Corrección de cuenta
+  if (!field) {
+    const account = extractAccount(text, dbAccounts)
+    if (account) {
+      field = "account"
+      newValue = account
+      console.log("[NLP] ✅ Detected account correction:", account)
+    }
+  }
+
+  if (!field || !newValue) {
+    console.log("[NLP] ⚠️ Correction detected but no field identified. Text:", text)
   }
 
   return {

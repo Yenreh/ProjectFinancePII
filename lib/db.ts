@@ -26,12 +26,12 @@ export const dbQueries = {
   },
 
   // Accounts
-  async getAccounts(includeArchived: boolean = false): Promise<Account[]> {
+  async getAccounts(includeArchived = false): Promise<Account[]> {
     if (!sql) return []
 
     let query = `
-      SELECT id, name, account_type as type, balance, currency, 
-             is_archived, created_at::text as created_at, updated_at::text as updated_at
+      SELECT id, name, account_type as type, balance::text, currency, is_archived,
+             created_at::text as created_at, updated_at::text as updated_at
       FROM accounts
     `
 
@@ -40,7 +40,12 @@ export const dbQueries = {
     }
 
     const result = await sql.query(query)
-    return result as Account[]
+    
+    // Convert balance from string to number
+    return result.map((account: any) => ({
+      ...account,
+      balance: Number(account.balance)
+    })) as Account[]
   },
 
   async createAccount(account: Omit<Account, 'id' | 'created_at' | 'updated_at'>): Promise<Account> {
@@ -49,15 +54,29 @@ export const dbQueries = {
     const result = await sql.query(`
       INSERT INTO accounts (name, account_type, balance, currency, is_archived)
       VALUES ($1, $2, $3, $4, $5)
-      RETURNING id, name, account_type as type, balance, currency, 
+      RETURNING id, name, account_type as type, balance::text, currency, 
                 is_archived, created_at::text as created_at, updated_at::text as updated_at
     `, [account.name, account.type, account.balance, account.currency, account.is_archived])
 
-    return result[0] as Account
+    const createdAccount = result[0] as any
+    return {
+      ...createdAccount,
+      balance: Number(createdAccount.balance)
+    } as Account
   },
 
   async updateAccount(id: number, updates: Partial<Account>): Promise<Account> {
     if (!sql) throw new Error("Database not available")
+
+    // Validar balance si se está actualizando
+    if (updates.balance !== undefined) {
+      const balanceNum = Number(updates.balance)
+      if (isNaN(balanceNum)) {
+        console.error("[DB] ❌ Attempted to update account with NaN balance:", updates.balance)
+        throw new Error("Balance inválido: no es un número")
+      }
+      updates.balance = balanceNum
+    }
 
     const fields: string[] = []
     const values: any[] = []
@@ -84,17 +103,36 @@ export const dbQueries = {
       values.push(updates.is_archived)
     }
 
+    if (fields.length === 0) {
+      throw new Error("No hay campos para actualizar")
+    }
+
     values.push(id)
 
     const result = await sql.query(`
       UPDATE accounts 
       SET ${fields.join(', ')}
       WHERE id = $${paramIndex}
-      RETURNING id, name, account_type as type, balance, currency, 
+      RETURNING id, name, account_type as type, balance::text, currency, 
                 is_archived, created_at::text as created_at, updated_at::text as updated_at
     `, values)
 
-    return result[0] as Account
+    if (!result || result.length === 0) {
+      throw new Error(`Cuenta con ID ${id} no encontrada`)
+    }
+
+    const updatedAccount = result[0] as any
+    const finalBalance = Number(updatedAccount.balance)
+    
+    if (isNaN(finalBalance)) {
+      console.error("[DB] ❌ Account balance is NaN after update:", updatedAccount.balance)
+      throw new Error("Balance corrupto después de actualizar")
+    }
+
+    return {
+      ...updatedAccount,
+      balance: finalBalance
+    } as Account
   },
 
   async deleteAccount(id: number): Promise<boolean> {
@@ -153,7 +191,12 @@ export const dbQueries = {
     query += ` ORDER BY t.transaction_date DESC`
 
     const result = await sql.query(query, values)
-    return result as TransactionWithDetails[]
+    
+    // Convert amount from string to number
+    return result.map((transaction: any) => ({
+      ...transaction,
+      amount: Number(transaction.amount)
+    })) as TransactionWithDetails[]
   },
 
   async createTransaction(transaction: Omit<Transaction, 'id' | 'created_at' | 'updated_at'>): Promise<Transaction> {
@@ -162,11 +205,15 @@ export const dbQueries = {
     const result = await sql.query(`
       INSERT INTO transactions (account_id, category_id, transaction_type, amount, description, transaction_date)
       VALUES ($1, $2, $3, $4, $5, $6)
-      RETURNING id, account_id, category_id, transaction_type as type, amount, description,
+      RETURNING id, account_id, category_id, transaction_type as type, amount::text, description,
                 transaction_date::text as date, created_at::text as created_at, updated_at::text as updated_at
     `, [transaction.account_id, transaction.category_id, transaction.type, transaction.amount, transaction.description, transaction.date])
 
-    return result[0] as Transaction
+    const created = result[0] as any
+    return {
+      ...created,
+      amount: Number(created.amount)
+    } as Transaction
   },
 
   async updateTransaction(id: number, updates: Partial<Transaction>): Promise<Transaction> {
@@ -207,11 +254,15 @@ export const dbQueries = {
       UPDATE transactions 
       SET ${fields.join(', ')}
       WHERE id = $${paramIndex}
-      RETURNING id, account_id, category_id, transaction_type as type, amount, description,
+      RETURNING id, account_id, category_id, transaction_type as type, amount::text, description,
                 transaction_date::text as date, created_at::text as created_at, updated_at::text as updated_at
     `, values)
 
-    return result[0] as Transaction
+    const updated = result[0] as any
+    return {
+      ...updated,
+      amount: Number(updated.amount)
+    } as Transaction
   },
 
   async deleteTransaction(id: number): Promise<boolean> {
