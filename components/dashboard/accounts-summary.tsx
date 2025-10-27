@@ -9,7 +9,11 @@ import { formatCurrency } from "@/lib/format"
 import type { Account } from "@/lib/types"
 import { cn } from "@/lib/utils"
 
-export function AccountsSummary() {
+interface AccountsSummaryProps {
+  refreshTrigger?: number
+}
+
+export function AccountsSummary({ refreshTrigger }: AccountsSummaryProps) {
   const [accounts, setAccounts] = useState<Account[]>([])
   const [loading, setLoading] = useState(true)
 
@@ -27,9 +31,13 @@ export function AccountsSummary() {
     }
 
     fetchAccounts()
-  }, [])
+  }, [refreshTrigger])
 
-  const totalBalance = accounts.reduce((sum, account) => sum + account.balance, 0)
+  // Calcular balance total con conversión explícita a número
+  const totalBalance = accounts.reduce((sum, account) => {
+    const balance = Number(account.balance) || 0
+    return sum + balance
+  }, 0)
 
   return (
     <Card>

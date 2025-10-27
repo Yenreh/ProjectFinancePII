@@ -15,6 +15,7 @@ import type { DashboardMetrics } from "@/lib/types"
 export default function DashboardPage() {
   const [metrics, setMetrics] = useState<DashboardMetrics | null>(null)
   const [loading, setLoading] = useState(true)
+  const [refreshTrigger, setRefreshTrigger] = useState(0)
 
   const fetchMetrics = async () => {
     try {
@@ -26,6 +27,11 @@ export default function DashboardPage() {
     } finally {
       setLoading(false)
     }
+  }
+
+  const handleDataRefresh = () => {
+    fetchMetrics()
+    setRefreshTrigger((prev) => prev + 1)
   }
 
   useEffect(() => {
@@ -69,12 +75,12 @@ export default function DashboardPage() {
             </div>
 
             <div className="mb-6">
-              <QuickTransactionButtons onSuccess={fetchMetrics} />
+              <QuickTransactionButtons onSuccess={handleDataRefresh} />
             </div>
 
             <div className="grid gap-6 lg:grid-cols-2">
-              <RecentTransactions />
-              <AccountsSummary />
+              <RecentTransactions refreshTrigger={refreshTrigger} />
+              <AccountsSummary refreshTrigger={refreshTrigger} />
             </div>
           </>
         ) : (
@@ -85,7 +91,7 @@ export default function DashboardPage() {
       <MobileNav />
       
       {/* Asistente de voz flotante */}
-      <VoiceAssistantButton onTransactionCreated={fetchMetrics} />
+      <VoiceAssistantButton onTransactionCreated={handleDataRefresh} />
     </div>
   )
 }

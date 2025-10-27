@@ -9,6 +9,7 @@ import { TransactionList } from "@/components/transactions/transaction-list"
 import { TransactionFormDialog } from "@/components/transactions/transaction-form-dialog"
 import { QuickTransactionButtons } from "@/components/transactions/quick-transaction-buttons"
 import { TransactionFilters, type FilterValues } from "@/components/transactions/transaction-filters"
+import { VoiceAssistantButton } from "@/components/voice/voice-assistant-button"
 import type { TransactionWithDetails } from "@/lib/types"
 
 export default function TransaccionesPage() {
@@ -104,6 +105,9 @@ export default function TransaccionesPage() {
         transaction={selectedTransaction}
         onSuccess={fetchTransactions}
       />
+
+      {/* Asistente de voz flotante */}
+      <VoiceAssistantButton onTransactionCreated={fetchTransactions} />
     </div>
   )
 }

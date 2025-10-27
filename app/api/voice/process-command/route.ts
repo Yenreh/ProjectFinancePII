@@ -358,13 +358,19 @@ async function processConfirmedTransaction(parsedData: any) {
       date: new Date().toISOString().split("T")[0],
     })
 
+    console.log(`[Voice] Transacción creada: ID=${transaction.id}, Tipo=${parsedData.transactionType}, Monto=${parsedData.amount}, Cuenta=${parsedData.accountId}`)
+
     // Actualizar el balance de la cuenta
     const newBalance =
       parsedData.transactionType === "ingreso"
         ? account.balance + parsedData.amount
         : account.balance - parsedData.amount
 
+    console.log(`[Voice] Actualizando balance: Cuenta=${parsedData.accountId}, Balance anterior=${account.balance}, Nuevo balance=${newBalance}`)
+
     await dbQueries.updateAccount(parsedData.accountId, { balance: newBalance })
+
+    console.log(`[Voice] Balance actualizado exitosamente`)
 
     // Mensaje de confirmación detallado
     const typeText = parsedData.transactionType === "ingreso" ? "Ingreso" : "Gasto"

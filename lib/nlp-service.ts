@@ -358,47 +358,12 @@ function extractAccount(text: string): string | undefined {
 
 /**
  * Extrae la descripción del comando
+ * Mantiene el texto reconocido completo para mejor contexto
  */
 function extractDescription(text: string, amount?: number, category?: string): string {
-  let description = text
-
-  // Remover palabras clave de intención
-  Object.values(INTENTION_KEYWORDS)
-    .flat()
-    .forEach((keyword) => {
-      const regex = new RegExp(`\\b${keyword}\\b`, "gi")
-      description = description.replace(regex, "")
-    })
-
-  // Remover el monto
-  if (amount) {
-    const amountPatterns = [
-      new RegExp(`\\b${amount}\\b`, "g"),
-      new RegExp(`\\b${amount.toLocaleString()}\\b`, "g"),
-      /\d{1,3}(?:[.,]\d{3})*(?:[.,]\d{2})?\s*(?:pesos?|cop|$|dólares?|usd)?/gi,
-    ]
-    amountPatterns.forEach((pattern) => {
-      description = description.replace(pattern, "")
-    })
-  }
-
-  // Remover palabras de categoría
-  if (category && CATEGORY_MAPPINGS[category]) {
-    CATEGORY_MAPPINGS[category].forEach((keyword) => {
-      const regex = new RegExp(`\\b${keyword}\\b`, "gi")
-      description = description.replace(regex, "")
-    })
-  }
-
-  // Limpiar espacios extras
-  description = description.replace(/\s+/g, " ").trim()
-
-  // Si la descripción quedó vacía, usar el texto original resumido
-  if (!description && category) {
-    description = `Transacción de ${category}`
-  }
-
-  return description || "Transacción por voz"
+  // Simplemente retornar el texto original limpio
+  // El usuario prefiere ver el texto completo reconocido
+  return text.trim()
 }
 
 /**

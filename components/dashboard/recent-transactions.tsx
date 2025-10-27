@@ -8,7 +8,11 @@ import { Button } from "@/components/ui/button"
 import { TransactionItem } from "@/components/transactions/transaction-item"
 import type { TransactionWithDetails } from "@/lib/types"
 
-export function RecentTransactions() {
+interface RecentTransactionsProps {
+  refreshTrigger?: number
+}
+
+export function RecentTransactions({ refreshTrigger }: RecentTransactionsProps) {
   const [transactions, setTransactions] = useState<TransactionWithDetails[]>([])
   const [loading, setLoading] = useState(true)
 
@@ -26,7 +30,7 @@ export function RecentTransactions() {
     }
 
     fetchTransactions()
-  }, [])
+  }, [refreshTrigger])
 
   return (
     <Card>
