@@ -8,7 +8,7 @@ import { Suspense } from "react"
 import "./globals.css"
 
 export const metadata: Metadata = {
-  title: "Finanzas Personales",
+  title: "CashFlow",
   description: "Gestiona tus finanzas personales de manera simple y efectiva",
   generator: "v0.app",
 }
@@ -20,6 +20,9 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="es">
+      <head>
+        <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+      </head>
       <body className={`font-sans ${GeistSans.variable} ${GeistMono.variable}`}>
         <Suspense fallback={<div>Loading...</div>}>{children}</Suspense>
         <Toaster richColors position="top-right" />

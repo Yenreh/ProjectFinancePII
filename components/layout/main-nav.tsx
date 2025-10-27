@@ -21,12 +21,16 @@ export function MainNav() {
         <div className="flex h-16 items-center justify-between">
           <div className="flex items-center gap-8">
             <Link href="/" className="flex items-center gap-2">
-              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary">
-                <Wallet className="h-5 w-5 text-primary-foreground" />
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary">
+              {/* Using the project's favicon.svg from /public as the app logo */}
+              <img
+                src="/favicon.svg"
+                alt="CashFlow logo"
+                className="h-7 w-6 rounded-lg object-contain"
+              />
               </div>
-              <span className="text-lg font-semibold">Finanzas</span>
+              <span className="text-lg font-semibold">CashFlow</span>
             </Link>
-
             <div className="hidden md:flex items-center gap-1">
               {navItems.map((item) => {
                 const Icon = item.icon
