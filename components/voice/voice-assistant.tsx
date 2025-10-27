@@ -366,6 +366,23 @@ export function VoiceAssistant({ onTransactionCreated }: VoiceAssistantProps) {
         description: editedDescription || processingResult.parsedCommand.description,
       }
 
+      // Actualizar IDs si el usuario cambió categoría o cuenta manualmente
+      if (editedCategory && editedCategory !== processingResult.parsedCommand.categoryName) {
+        const category = categories.find(c => c.name === editedCategory)
+        if (category) {
+          updatedCommand.categoryId = category.id
+          updatedCommand.categoryName = category.name
+        }
+      }
+
+      if (editedAccount && editedAccount !== processingResult.parsedCommand.accountName) {
+        const account = accounts.find(a => a.name === editedAccount)
+        if (account) {
+          updatedCommand.accountId = account.id
+          updatedCommand.accountName = account.name
+        }
+      }
+
       const response = await fetch("/api/voice/process-command", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
