@@ -2,13 +2,11 @@
 
 import { useState, useEffect } from "react"
 import { TrendingUp, TrendingDown, Wallet, Receipt } from "lucide-react"
-import { MainNav } from "@/components/layout/main-nav"
-import { MobileNav } from "@/components/layout/mobile-nav"
+import { AppLayout } from "@/components/layout/app-layout"
 import { MetricCard } from "@/components/dashboard/metric-card"
 import { RecentTransactions } from "@/components/dashboard/recent-transactions"
 import { AccountsSummary } from "@/components/dashboard/accounts-summary"
 import { QuickTransactionButtons } from "@/components/transactions/quick-transaction-buttons"
-import { VoiceAssistantButton } from "@/components/voice/voice-assistant-button"
 import { formatCurrency } from "@/lib/format"
 import type { DashboardMetrics } from "@/lib/types"
 
@@ -39,10 +37,8 @@ export default function DashboardPage() {
   }, [])
 
   return (
-    <div className="min-h-screen bg-background">
-      <MainNav />
-
-      <main className="container mx-auto px-4 py-8 pb-24 md:pb-8">
+    <AppLayout onTransactionCreated={handleDataRefresh}>
+      <div className="container mx-auto px-4 py-8 pb-24 md:pb-8">
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-balance mb-2">Dashboard</h1>
           <p className="text-muted-foreground">Resumen de tus finanzas personales</p>
@@ -86,12 +82,7 @@ export default function DashboardPage() {
         ) : (
           <div className="text-center py-12 text-muted-foreground">Error al cargar las métricas</div>
         )}
-      </main>
-
-      <MobileNav />
-      
-      {/* Asistente de voz flotante */}
-      <VoiceAssistantButton onTransactionCreated={handleDataRefresh} />
-    </div>
+      </div>
+    </AppLayout>
   )
 }

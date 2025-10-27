@@ -126,6 +126,28 @@ export async function POST(request: NextRequest) {
     if (parsed.intention === "consulta") {
       return await processQuery(parsed)
     }
+
+    // Si es navegación, procesarla directamente (HU-011)
+    if (parsed.intention === "navegacion") {
+      const navigationMessages: Record<string, string> = {
+        cuentas: "Abriendo la sección de cuentas",
+        transacciones: "Abriendo el historial de transacciones",
+        reportes: "Abriendo los reportes financieros",
+        inicio: "Regresando a la página principal",
+      }
+      
+      const message = parsed.navigationType 
+        ? navigationMessages[parsed.navigationType] 
+        : "Navegando"
+
+      const result: VoiceProcessingResult = {
+        success: true,
+        message,
+        parsedCommand: parsed,
+        needsConfirmation: false,
+      }
+      return NextResponse.json(result)
+    }
     
     // Enriquecer con IDs de la base de datos (para transacciones)
     parsed = enrichWithDatabaseIds(parsed, categories, accounts)
@@ -163,16 +185,15 @@ export async function POST(request: NextRequest) {
 
     // Si falta información, solicitar más datos
     const suggestions = generateSuggestions(parsed, categories, accounts)
-    const allErrors = [...validation.missingFields, ...backendValidation.errors]
 
-    // Crear mensaje de error más específico
-    let errorMessage = "Me falta información. "
+    // Crear mensaje de error MÁS CONCISO
+    let errorMessage = "Falta información"
     if (validation.missingFields.includes("categoría")) {
-      errorMessage = "No identifiqué la categoría. "
+      errorMessage = "Falta categoría"
     } else if (validation.missingFields.includes("monto")) {
-      errorMessage = "No entendí el monto. "
+      errorMessage = "Falta monto"
     } else if (validation.missingFields.includes("tipo de transacción")) {
-      errorMessage = "No sé si es ingreso o gasto. "
+      errorMessage = "¿Ingreso o gasto?"
     }
 
     const result: VoiceProcessingResult = {
@@ -212,7 +233,7 @@ async function processQuery(parsed: any) {
         if (!data.success || !data.transaction) {
           const result: VoiceProcessingResult = {
             success: true,
-            message: "No tienes ningún gasto registrado aún",
+            message: "No tienes gastos registrados todavía",
             parsedCommand: parsed,
             needsConfirmation: false,
           }
@@ -220,9 +241,10 @@ async function processQuery(parsed: any) {
         }
 
         const t = data.transaction
+        const amount = t.amount.toLocaleString("es-CO")
         const result: VoiceProcessingResult = {
           success: true,
-          message: `Tu último gasto fue de $${t.amount.toLocaleString("es-CO")} pesos en ${t.categoryName}. ${t.description}`,
+          message: `Tu último gasto fue de ${amount} pesos en ${t.categoryName}`,
           parsedCommand: parsed,
           needsConfirmation: false,
         }
@@ -239,7 +261,7 @@ async function processQuery(parsed: any) {
         if (!data.success || !data.transaction) {
           const result: VoiceProcessingResult = {
             success: true,
-            message: "No tienes ningún ingreso registrado aún",
+            message: "No tienes ingresos registrados todavía",
             parsedCommand: parsed,
             needsConfirmation: false,
           }
@@ -247,9 +269,10 @@ async function processQuery(parsed: any) {
         }
 
         const t = data.transaction
+        const amount = t.amount.toLocaleString("es-CO")
         const result: VoiceProcessingResult = {
           success: true,
-          message: `Tu último ingreso fue de $${t.amount.toLocaleString("es-CO")} pesos en ${t.categoryName}. ${t.description}`,
+          message: `Tu último ingreso fue de ${amount} pesos en ${t.categoryName}`,
           parsedCommand: parsed,
           needsConfirmation: false,
         }
@@ -277,17 +300,18 @@ async function processQuery(parsed: any) {
         if (!data.success) {
           const result: VoiceProcessingResult = {
             success: true,
-            message: "Aún no tienes transacciones hoy",
+            message: "No tienes transacciones registradas para hoy",
             parsedCommand: parsed,
             needsConfirmation: false,
           }
           return NextResponse.json(result)
         }
 
-        const typeText = data.data.type === "gasto" ? "gastado" : data.data.type === "ingreso" ? "recibido" : "movido"
+        const typeText = data.data.type === "gasto" ? "Gastaste" : data.data.type === "ingreso" ? "Recibiste" : "Moviste"
+        const amount = data.data.total.toLocaleString("es-CO")
         const message = data.data.total > 0
-          ? `Hoy has ${typeText} $${data.data.total.toLocaleString("es-CO")} pesos en ${data.data.count} ${data.data.count === 1 ? "transacción" : "transacciones"}`
-          : "Aún no tienes transacciones hoy"
+          ? `${typeText} ${amount} pesos el día de hoy`
+          : "No tienes transacciones registradas para hoy"
 
         const result: VoiceProcessingResult = {
           success: true,
@@ -305,7 +329,7 @@ async function processQuery(parsed: any) {
         if (accounts.length === 0) {
           const result: VoiceProcessingResult = {
             success: true,
-            message: "No tienes cuentas registradas aún",
+            message: "No tienes cuentas creadas todavía. Crea una cuenta para comenzar a registrar tus finanzas",
             parsedCommand: parsed,
             needsConfirmation: false,
           }
@@ -317,18 +341,11 @@ async function processQuery(parsed: any) {
           return sum + Number(account.balance)
         }, 0)
 
-        // Generar mensaje con detalle por cuenta
-        let message = `Tu balance total es de $${totalBalance.toLocaleString("es-CO")} pesos. `
-        
-        if (accounts.length === 1) {
-          message += `En tu cuenta ${accounts[0].name}.`
-        } else {
-          message += "Distribuido en: "
-          const accountDetails = accounts.map(acc => 
-            `${acc.name} con $${Number(acc.balance).toLocaleString("es-CO")}`
-          ).join(", ")
-          message += accountDetails
-        }
+        const balanceText = totalBalance.toLocaleString("es-CO")
+        // Si solo hay una cuenta, mencionar su nombre
+        const message = accounts.length === 1
+          ? `Tu balance en ${accounts[0].name} es de ${balanceText} pesos`
+          : `Tu balance total es de ${balanceText} pesos en ${accounts.length} cuentas`
 
         const result: VoiceProcessingResult = {
           success: true,
@@ -495,15 +512,14 @@ async function processConfirmedTransaction(parsedData: any) {
       throw error
     }
 
-    // Mensaje de confirmación detallado
+    // Mensaje de confirmación CONCISO con nuevo balance
     const typeText = parsedData.transactionType === "ingreso" ? "Ingreso" : "Gasto"
     const amountText = parsedData.amount.toLocaleString("es-CO")
-    const categoryText = parsedData.categoryName || "sin categoría"
-    const accountText = parsedData.accountName || account.name
+    const balanceText = newBalance.toLocaleString("es-CO")
     
     const result: VoiceProcessingResult = {
       success: true,
-      message: `¡Listo! Tu ${typeText.toLowerCase()} de $${amountText} pesos en ${categoryText} fue guardado en la cuenta ${accountText}. El nuevo balance es $${newBalance.toLocaleString("es-CO")} pesos.`,
+      message: `Listo. ${typeText} de ${amountText} guardado. Nuevo balance: ${balanceText} pesos`,
       transactionId: transaction.id,
       needsConfirmation: false,
     }

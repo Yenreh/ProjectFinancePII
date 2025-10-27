@@ -3,13 +3,11 @@
 import { useState, useEffect } from "react"
 import { Plus } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { MainNav } from "@/components/layout/main-nav"
-import { MobileNav } from "@/components/layout/mobile-nav"
+import { AppLayout } from "@/components/layout/app-layout"
 import { TransactionList } from "@/components/transactions/transaction-list"
 import { TransactionFormDialog } from "@/components/transactions/transaction-form-dialog"
 import { QuickTransactionButtons } from "@/components/transactions/quick-transaction-buttons"
 import { TransactionFilters, type FilterValues } from "@/components/transactions/transaction-filters"
-import { VoiceAssistantButton } from "@/components/voice/voice-assistant-button"
 import type { TransactionWithDetails } from "@/lib/types"
 
 export default function TransaccionesPage() {
@@ -65,10 +63,8 @@ export default function TransaccionesPage() {
   }
 
   return (
-    <div className="min-h-screen bg-background">
-      <MainNav />
-
-      <main className="container mx-auto px-4 py-8 pb-24 md:pb-8">
+    <AppLayout onTransactionCreated={fetchTransactions}>
+      <div className="container mx-auto px-4 py-8 pb-24 md:pb-8">
         <div className="max-w-3xl mx-auto">
           <div className="flex items-center justify-between mb-6">
             <div>
@@ -95,9 +91,7 @@ export default function TransaccionesPage() {
             <TransactionList transactions={transactions} onEdit={handleEdit} onDelete={handleDelete} />
           )}
         </div>
-      </main>
-
-      <MobileNav />
+      </div>
 
       <TransactionFormDialog
         open={dialogOpen}
@@ -105,9 +99,6 @@ export default function TransaccionesPage() {
         transaction={selectedTransaction}
         onSuccess={fetchTransactions}
       />
-
-      {/* Asistente de voz flotante */}
-      <VoiceAssistantButton onTransactionCreated={fetchTransactions} />
-    </div>
+    </AppLayout>
   )
 }

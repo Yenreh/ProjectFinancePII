@@ -1,10 +1,11 @@
 "use client"
 
 import { useState } from "react"
-import { Mic, X } from "lucide-react"
+import { Mic } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { Dialog, DialogContent, DialogTitle, DialogDescription } from "@/components/ui/dialog"
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog"
 import { VoiceAssistant } from "./voice-assistant"
+import { VisuallyHidden } from "@radix-ui/react-visually-hidden"
 
 interface VoiceAssistantButtonProps {
   onTransactionCreated?: () => void
@@ -33,13 +34,12 @@ export function VoiceAssistantButton({ onTransactionCreated }: VoiceAssistantBut
         <span className="sr-only">Abrir asistente de voz</span>
       </Button>
 
-      {/* Diálogo con el asistente */}
+      {/* Diálogo con el asistente - SIN padding extra */}
       <Dialog open={isOpen} onOpenChange={setIsOpen}>
-        <DialogContent className="max-w-2xl">
-          <DialogTitle className="sr-only">Asistente de Voz</DialogTitle>
-          <DialogDescription className="sr-only">
-            Registra transacciones usando tu voz
-          </DialogDescription>
+        <DialogContent className="max-w-5xl p-0 gap-0 overflow-hidden">
+          <VisuallyHidden>
+            <DialogTitle>Asistente de Voz</DialogTitle>
+          </VisuallyHidden>
           <VoiceAssistant onTransactionCreated={handleTransactionCreated} />
         </DialogContent>
       </Dialog>

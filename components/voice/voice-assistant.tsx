@@ -5,9 +5,13 @@ import { useRouter } from "next/navigation"
 import { Mic, MicOff, Loader2, Check, X, Volume2, RefreshCw } from "lucide-react"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Textarea } from "@/components/ui/textarea"
 import { useVoiceRecorder } from "@/lib/hooks/use-voice-recorder"
 import type { VoiceProcessingResult, ParsedVoiceCommand } from "@/lib/voice-types"
+import type { Account, Category } from "@/lib/types"
 
 // HU-012: Comandos sugeridos
 const SUGGESTED_COMMANDS = {
@@ -51,6 +55,18 @@ export function VoiceAssistant({ onTransactionCreated }: VoiceAssistantProps) {
   const [originalCommand, setOriginalCommand] = useState<ParsedVoiceCommand | null>(null)
   const [pendingCommand, setPendingCommand] = useState<ParsedVoiceCommand | null>(null)
   const [isContinuousMode, setIsContinuousMode] = useState(false)
+  
+  // Estados para edición inline
+  const [editedType, setEditedType] = useState<string>("")
+  const [editedAmount, setEditedAmount] = useState<string>("")
+  const [editedCategory, setEditedCategory] = useState<string>("")
+  const [editedAccount, setEditedAccount] = useState<string>("")
+  const [editedDescription, setEditedDescription] = useState<string>("")
+  const [hasManualEdits, setHasManualEdits] = useState(false)
+
+  // Datos de categorías y cuentas
+  const [categories, setCategories] = useState<Category[]>([])
+  const [accounts, setAccounts] = useState<Account[]>([])
 
   const audioRef = useRef<HTMLAudioElement | null>(null)
   const pendingCommandRef = useRef<ParsedVoiceCommand | null>(null)
@@ -59,6 +75,25 @@ export function VoiceAssistant({ onTransactionCreated }: VoiceAssistantProps) {
   useEffect(() => {
     pendingCommandRef.current = pendingCommand
   }, [pendingCommand])
+
+  // Cargar categorías y cuentas
+  useEffect(() => {
+    async function fetchData() {
+      try {
+        const [categoriesRes, accountsRes] = await Promise.all([
+          fetch("/api/categories"),
+          fetch("/api/accounts"),
+        ])
+        const categoriesData = await categoriesRes.json()
+        const accountsData = await accountsRes.json()
+        setCategories(categoriesData)
+        setAccounts(accountsData)
+      } catch (error) {
+        console.error("Error cargando categorías/cuentas:", error)
+      }
+    }
+    fetchData()
+  }, [])
 
   const {
     recordingState,
@@ -156,6 +191,13 @@ export function VoiceAssistant({ onTransactionCreated }: VoiceAssistantProps) {
       // Guardar el comando parseado para posibles correcciones
       if (result.parsedCommand) {
         setOriginalCommand(result.parsedCommand)
+        // Inicializar campos editables
+        setEditedType(result.parsedCommand.transactionType || "")
+        setEditedAmount(result.parsedCommand.amount?.toString() || "")
+        setEditedCategory(result.parsedCommand.categoryName || "")
+        setEditedAccount(result.parsedCommand.accountName || "")
+        setEditedDescription(result.parsedCommand.description || "")
+        setHasManualEdits(false) // Resetear flag de edición manual
       }
       
       console.log('[Voice UI] ===== FIN DE PROCESAMIENTO =====')
@@ -205,9 +247,11 @@ export function VoiceAssistant({ onTransactionCreated }: VoiceAssistantProps) {
         await speakMessage(result.message)
       }
 
-      // HU-013: Si hubo error Y hay sugerencias, reproducirlas DESPUÉS del mensaje principal
+      // HU-013: Si hubo error Y hay sugerencias, reproducir SOLO las 2 primeras de forma concisa
       if (!result.success && result.suggestions && result.suggestions.length > 0) {
-        const suggestionsText = "Puedes decir: " + result.suggestions.join(", o ")
+        // Tomar solo las 2 primeras sugerencias para ser conciso
+        const topSuggestions = result.suggestions.slice(0, 2)
+        const suggestionsText = topSuggestions.join(", o ")
         await speakMessage(suggestionsText)
       }
 
@@ -230,7 +274,7 @@ export function VoiceAssistant({ onTransactionCreated }: VoiceAssistantProps) {
       toast.error("Error al procesar comando", {
         description: errorMessage,
       })
-      await speakMessage("Lo siento, ocurrió un error al procesar tu comando")
+      await speakMessage("Error al procesar comando")
     } finally {
       setIsProcessing(false)
     }
@@ -312,12 +356,22 @@ export function VoiceAssistant({ onTransactionCreated }: VoiceAssistantProps) {
     setError(null)
 
     try {
+      // Aplicar valores editados al comando antes de confirmar
+      const updatedCommand = {
+        ...processingResult.parsedCommand,
+        transactionType: editedType || processingResult.parsedCommand.transactionType,
+        amount: editedAmount ? parseFloat(editedAmount) : processingResult.parsedCommand.amount,
+        categoryName: editedCategory || processingResult.parsedCommand.categoryName,
+        accountName: editedAccount || processingResult.parsedCommand.accountName,
+        description: editedDescription || processingResult.parsedCommand.description,
+      }
+
       const response = await fetch("/api/voice/process-command", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           confirmed: true,
-          parsedData: processingResult.parsedCommand,
+          parsedData: updatedCommand,
         }),
       })
 
@@ -353,18 +407,10 @@ export function VoiceAssistant({ onTransactionCreated }: VoiceAssistantProps) {
       toast.error("Error al crear transacción", {
         description: errorMessage,
       })
-      await speakMessage("Lo siento, ocurrió un error al crear la transacción")
+      await speakMessage("Error al crear transacción")
     } finally {
       setIsProcessing(false)
     }
-  }
-
-  function handleCorrection() {
-    setIsInCorrectionMode(true)
-    setProcessingResult(null)
-    toast.info("Modo corrección activado", {
-      description: "Di tu corrección, por ejemplo: 'no, era 15000'",
-    })
   }
 
   function handleCancel() {
@@ -374,6 +420,7 @@ export function VoiceAssistant({ onTransactionCreated }: VoiceAssistantProps) {
     setOriginalCommand(null)
     setPendingCommand(null)
     pendingCommandRef.current = null  // Limpiar ref también
+    setHasManualEdits(false)
     stopAudio()
     cancelRecording()
   }
@@ -395,14 +442,20 @@ export function VoiceAssistant({ onTransactionCreated }: VoiceAssistantProps) {
     setOriginalCommand(null)
     setPendingCommand(null)
     pendingCommandRef.current = null  // Limpiar ref también
+    setHasManualEdits(false)
     stopAudio()
+  }
+
+  // Verificar si los campos tienen la información mínima necesaria
+  function hasMinimumRequiredData(): boolean {
+    return !!(editedType && editedAmount && parseFloat(editedAmount) > 0 && editedCategory && editedAccount)
   }
 
   // HU-010: Manejar comandos de control (modo manos libres)
   async function handleControlCommand(controlType?: string, message?: string) {
     if (controlType === "activar_continuo") {
       setIsContinuousMode(true)
-      await speakMessage("Modo manos libres activado. Estoy escuchando continuamente.")
+      await speakMessage("Modo continuo activado")
       toast.success("Modo manos libres activado", {
         description: "El asistente seguirá escuchando después de cada comando",
       })
@@ -410,12 +463,12 @@ export function VoiceAssistant({ onTransactionCreated }: VoiceAssistantProps) {
       setTimeout(() => startRecording(), 1500)
     } else if (controlType === "desactivar_continuo") {
       setIsContinuousMode(false)
-      await speakMessage("Modo manos libres desactivado.")
+      await speakMessage("Modo continuo desactivado")
       toast.info("Modo manos libres desactivado")
       cancelRecording()
     } else if (controlType === "cancelar") {
       handleCancel()
-      await speakMessage("Operación cancelada")
+      await speakMessage("Cancelado")
     }
   }
 
@@ -428,10 +481,18 @@ export function VoiceAssistant({ onTransactionCreated }: VoiceAssistantProps) {
       inicio: "/",
     }
 
+    const navigationMessages: Record<string, string> = {
+      cuentas: "Abriendo la sección de cuentas",
+      transacciones: "Abriendo el historial de transacciones",
+      reportes: "Abriendo los reportes financieros",
+      inicio: "Regresando a la página principal",
+    }
+
     const route = navigationType ? routes[navigationType] : "/"
+    const voiceMessage = navigationType ? navigationMessages[navigationType] : navigationMessages.inicio
     
     if (route) {
-      await speakMessage(`Navegando a ${navigationType || "inicio"}`)
+      await speakMessage(voiceMessage)
       toast.info(`Navegando a ${navigationType || "inicio"}`)
       router.push(route)
     }
@@ -445,38 +506,41 @@ export function VoiceAssistant({ onTransactionCreated }: VoiceAssistantProps) {
 
   const showRecordButton = recordingState === "idle" && !processingResult?.transactionId
   const showStopButton = isListening
-  const showConfirmation = processingResult?.needsConfirmation
+  const showConfirmation = processingResult?.needsConfirmation || (hasManualEdits && hasMinimumRequiredData())
   const showSuccess = processingResult?.success && processingResult.transactionId
 
   return (
-    <Card
-      className="w-full max-w-2xl mx-auto"
+    <div
+      className="w-full"
       role="region"
       aria-label="Asistente de voz para finanzas personales"
     >
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
+      {/* Header del modal */}
+      <div className="px-6 py-4 border-b bg-background">
+        <div className="flex items-center gap-2">
           <Mic className="h-5 w-5" />
-          Asistente de Voz
+          <h2 className="text-lg font-semibold">Asistente de Voz</h2>
           {isContinuousMode && (
             <span className="text-xs bg-blue-500 text-white px-2 py-1 rounded-full">
               Modo Manos Libres
             </span>
           )}
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-4" aria-live="polite">
-        {/* Botones de control */}
-        <div className="flex flex-col items-center gap-4">
+        </div>
+      </div>
+
+      {/* Contenido del modal */}
+      <div className="px-6 py-4 space-y-4 max-h-[calc(100vh-200px)] overflow-y-auto" aria-live="polite">
+        {/* Botones de control - Altura fija para evitar saltos */}
+        <div className="flex flex-col items-center gap-4 min-h-[100px] justify-center">
           {showRecordButton && (
             <Button
               size="lg"
               variant="default"
-              className="h-24 w-24 rounded-full"
+              className="h-20 w-20 rounded-full transition-all"
               onClick={startRecording}
               aria-label="Iniciar grabación de voz"
             >
-              <Mic className="h-8 w-8" />
+              <Mic className="h-7 w-7" />
             </Button>
           )}
 
@@ -484,22 +548,22 @@ export function VoiceAssistant({ onTransactionCreated }: VoiceAssistantProps) {
             <Button
               size="lg"
               variant="destructive"
-              className="h-24 w-24 rounded-full animate-pulse"
+              className="h-20 w-20 rounded-full animate-pulse transition-all"
               onClick={stopRecording}
             >
-              <MicOff className="h-8 w-8" />
+              <MicOff className="h-7 w-7" />
             </Button>
           )}
 
           {isProcessing && (
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 transition-opacity">
               <Loader2 className="h-6 w-6 animate-spin" />
               <span>Procesando...</span>
             </div>
           )}
 
           {isSpeaking && (
-            <div className="flex flex-col items-center gap-3">
+            <div className="flex flex-col items-center gap-3 transition-opacity">
               <div className="flex items-center gap-2 text-blue-500">
                 <Volume2 className="h-6 w-6 animate-pulse" />
                 <span>Reproduciendo respuesta...</span>
@@ -517,174 +581,234 @@ export function VoiceAssistant({ onTransactionCreated }: VoiceAssistantProps) {
           )}
         </div>
 
-        {/* Transcripción */}
+        {/* Transcripción - Con transición suave */}
         {transcription && (
-          <div className="p-4 bg-muted rounded-lg">
+          <div className="p-4 bg-muted rounded-lg transition-all animate-in fade-in slide-in-from-top-2 duration-300">
             <p className="text-sm font-medium mb-1">Escuché:</p>
             <p className="text-sm italic">&quot;{transcription}&quot;</p>
           </div>
         )}
 
-        {/* Resultado del procesamiento */}
-        {processingResult && (
-          <div className="space-y-3">
-            {/* Comando parseado */}
-            {processingResult.parsedCommand && (
-              <div className="p-4 bg-muted rounded-lg space-y-2">
-                <p className="text-sm font-medium">Información detectada:</p>
-                <div className="text-sm space-y-1">
-                  {processingResult.parsedCommand.transactionType && (
-                    <p>
-                      <span className="font-medium">Tipo:</span>{" "}
-                      {processingResult.parsedCommand.transactionType === "ingreso"
-                        ? "Ingreso"
-                        : "Gasto"}
-                    </p>
-                  )}
-                  {processingResult.parsedCommand.amount && (
-                    <p>
-                      <span className="font-medium">Monto:</span> $
-                      {processingResult.parsedCommand.amount.toLocaleString("es-CO")}
-                    </p>
-                  )}
-                  {processingResult.parsedCommand.categoryName && (
-                    <p>
-                      <span className="font-medium">Categoría:</span>{" "}
-                      {processingResult.parsedCommand.categoryName}
-                    </p>
-                  )}
-                  {processingResult.parsedCommand.description && (
-                    <p>
-                      <span className="font-medium">Descripción:</span>{" "}
-                      {processingResult.parsedCommand.description}
-                    </p>
-                  )}
-                </div>
+        {/* Información detectada - Editable - SOLO PARA TRANSACCIONES (gasto/ingreso) */}
+        {processingResult?.parsedCommand && (processingResult.parsedCommand.intention === "gasto" || processingResult.parsedCommand.intention === "ingreso") && (
+          <div className="p-6 bg-background border rounded-lg space-y-4 transition-all animate-in fade-in slide-in-from-top-2 duration-300">
+            <h3 className="text-base font-semibold">Información detectada</h3>
+            
+            <div className="grid grid-cols-2 gap-4">
+              {/* Tipo - Siempre mostrar si hay resultado */}
+              <div className="grid gap-2">
+                <Label htmlFor="type-edit">Tipo</Label>
+                <Select
+                  value={editedType}
+                  onValueChange={(value) => {
+                    setEditedType(value)
+                    setHasManualEdits(true)
+                  }}
+                >
+                  <SelectTrigger id="type-edit">
+                    <SelectValue placeholder="Seleccionar tipo" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="gasto">Gasto</SelectItem>
+                    <SelectItem value="ingreso">Ingreso</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
-            )}
+              
+              {/* Monto - Siempre mostrar si hay resultado */}
+              <div className="grid gap-2">
+                <Label htmlFor="amount-edit">Monto</Label>
+                <Input
+                  id="amount-edit"
+                  type="number"
+                  step="0.01"
+                  value={editedAmount}
+                  onChange={(e) => {
+                    setEditedAmount(e.target.value)
+                    setHasManualEdits(true)
+                  }}
+                  placeholder="0.00"
+                />
+              </div>
+              
+              {/* Categoría - Siempre mostrar si hay resultado */}
+              <div className="grid gap-2">
+                <Label htmlFor="category-edit">Categoría</Label>
+                <Select
+                  value={editedCategory}
+                  onValueChange={(value) => {
+                    setEditedCategory(value)
+                    setHasManualEdits(true)
+                  }}
+                >
+                  <SelectTrigger id="category-edit">
+                    <SelectValue placeholder="Seleccionar categoría" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {categories
+                      .filter(cat => !editedType || cat.type === editedType)
+                      .map((category) => (
+                        <SelectItem key={category.id} value={category.name}>
+                          {category.name}
+                        </SelectItem>
+                      ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              
+              {/* Cuenta - Siempre mostrar si hay resultado */}
+              <div className="grid gap-2">
+                <Label htmlFor="account-edit">Cuenta</Label>
+                <Select
+                  value={editedAccount}
+                  onValueChange={(value) => {
+                    setEditedAccount(value)
+                    setHasManualEdits(true)
+                  }}
+                >
+                  <SelectTrigger id="account-edit">
+                    <SelectValue placeholder="Seleccionar cuenta" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {accounts.map((account) => (
+                      <SelectItem key={account.id} value={account.name}>
+                        {account.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            
+            {/* Descripción - Siempre mostrar si hay resultado */}
+            <div className="grid gap-2">
+              <Label htmlFor="description-edit">Descripción (opcional)</Label>
+              <Textarea
+                id="description-edit"
+                value={editedDescription}
+                onChange={(e) => {
+                  setEditedDescription(e.target.value)
+                  setHasManualEdits(true)
+                }}
+                placeholder="Ej: Compra en supermercado"
+                rows={2}
+              />
+            </div>
+          </div>
+        )}
 
-            {/* Mensaje */}
+        {/* Mensaje de estado - Área fija para evitar saltos */}
+        {processingResult && (
+          <div className="min-h-[60px] transition-all">
             <div
-              className={`p-4 rounded-lg ${
-                processingResult.success ? "bg-green-50 text-green-900" : "bg-yellow-50 text-yellow-900"
+              className={`p-4 rounded-lg transition-all animate-in fade-in duration-300 ${
+                processingResult.success 
+                  ? "bg-green-50 text-green-900 border-l-4 border-green-500" 
+                  : processingResult.needsAdditionalInfo
+                  ? "bg-blue-50 text-blue-900 border-l-4 border-blue-500"
+                  : "bg-yellow-50 text-yellow-900 border-l-4 border-yellow-500"
               }`}
             >
-              <p className="text-sm">{processingResult.message}</p>
+              <p className="text-sm font-medium">{processingResult.message}</p>
             </div>
+          </div>
+        )}
 
-            {/* Sugerencias */}
-            {processingResult.suggestions && processingResult.suggestions.length > 0 && (
-              <div className="p-4 bg-blue-50 text-blue-900 rounded-lg">
-                <p className="text-sm font-medium mb-2">Sugerencias:</p>
-                <ul className="text-sm space-y-1 list-disc list-inside">
-                  {processingResult.suggestions.map((suggestion, index) => (
-                    <li key={index}>{suggestion}</li>
-                  ))}
-                </ul>
-              </div>
-            )}
+        {/* Sugerencias - Solo mostrar si hay */}
+        {processingResult?.suggestions && processingResult.suggestions.length > 0 && (
+          <div className="p-4 bg-blue-50 text-blue-900 rounded-lg border-l-4 border-blue-400 transition-all animate-in fade-in slide-in-from-bottom-2 duration-300">
+            <p className="text-sm font-medium mb-2">Puedes decir:</p>
+            <div className="flex flex-wrap gap-2">
+              {processingResult.suggestions.map((suggestion, index) => (
+                <span
+                  key={index}
+                  className="inline-flex items-center px-3 py-1 rounded-full text-xs bg-blue-100 text-blue-800 border border-blue-200"
+                >
+                  &quot;{suggestion}&quot;
+                </span>
+              ))}
+            </div>
           </div>
         )}
 
         {/* Error */}
         {error && (
-          <div className="p-4 bg-red-50 text-red-900 rounded-lg">
+          <div className="p-4 bg-red-50 text-red-900 rounded-lg border-l-4 border-red-500 transition-all animate-in fade-in duration-300">
             <p className="text-sm font-medium">Error:</p>
             <p className="text-sm">{error}</p>
           </div>
         )}
 
-        {/* Botones de acción */}
-        {showConfirmation && (
-          <div className="space-y-2">
-            <div className="flex gap-2">
+        {/* Botones de acción - Área fija para evitar saltos */}
+        <div className="min-h-[48px] transition-all">
+          {showConfirmation && (
+            <div className="space-y-2 animate-in fade-in slide-in-from-bottom-2 duration-300">
               <Button
-                className="flex-1"
+                className="w-full"
                 onClick={handleConfirm}
                 disabled={isProcessing || isSpeaking}
               >
                 <Check className="h-4 w-4 mr-2" />
-                Confirmar
+                Confirmar Transacción
               </Button>
               <Button
-                variant="outline"
-                className="flex-1"
-                onClick={handleCorrection}
+                variant="ghost"
+                className="w-full"
+                onClick={handleCancel}
                 disabled={isProcessing || isSpeaking}
               >
-                <RefreshCw className="h-4 w-4 mr-2" />
-                Corregir
+                <X className="h-4 w-4 mr-2" />
+                Cancelar
               </Button>
             </div>
-            <Button
-              variant="ghost"
-              className="w-full"
-              onClick={handleCancel}
-              disabled={isProcessing || isSpeaking}
+          )}
+
+          {showSuccess && (
+            <Button 
+              className="w-full animate-in fade-in slide-in-from-bottom-2 duration-300" 
+              onClick={handleStartNew}
             >
-              <X className="h-4 w-4 mr-2" />
-              Cancelar
+              Hacer otra transacción
             </Button>
-          </div>
-        )}
+          )}
 
-        {showSuccess && (
-          <Button className="w-full" onClick={handleStartNew}>
-            Hacer otra transacción
-          </Button>
-        )}
-
-        {/* HU-013: Botón para repetir comando en caso de error */}
-        {!showConfirmation && !showSuccess && processingResult && !processingResult.success && (
-          <div className="flex gap-2">
-            {/* Si hay pendingCommand (usar ref para verificar), solo limpiar el resultado para reintentar responder */}
-            {(pendingCommand || pendingCommandRef.current) ? (
-              <>
-                <Button className="flex-1" onClick={() => {
-                  console.log('[Voice UI] 🔄 Responder de nuevo - pendingCommand:', pendingCommandRef.current)
-                  setProcessingResult(null)
-                  setError(null)
-                  stopAudio()
-                  // NO cambiar pendingCommand state ni ref, solo iniciar grabación
-                  setTimeout(() => startRecording(), 100)
-                }}>
-                  Responder de nuevo
-                </Button>
-                <Button variant="outline" className="flex-1" onClick={handleCancelAll}>
-                  <X className="h-4 w-4 mr-2" />
-                  Cancelar todo
-                </Button>
-              </>
-            ) : (
-              <>
-                <Button className="flex-1" onClick={handleStartNew}>
-                  Intentar de nuevo
-                </Button>
-                <Button variant="outline" className="flex-1" onClick={startRecording}>
-                  <RefreshCw className="h-4 w-4 mr-2" />
-                  Repetir
-                </Button>
-              </>
-            )}
-          </div>
-        )}
+          {/* Botones para cuando hay error o falta información */}
+          {!showConfirmation && !showSuccess && processingResult && !processingResult.success && (
+            <div className="flex gap-2 animate-in fade-in slide-in-from-bottom-2 duration-300">
+              <Button className="flex-1" onClick={handleStartNew}>
+                <RefreshCw className="h-4 w-4 mr-2" />
+                Nuevo
+              </Button>
+              <Button variant="outline" className="flex-1" onClick={handleCancelAll}>
+                <X className="h-4 w-4 mr-2" />
+                Cancelar
+              </Button>
+            </div>
+          )}
+        </div>
 
         {/* HU-012: Comandos sugeridos en pantalla inicial */}
         {!transcription && !processingResult && !isInCorrectionMode && (
-          <div className="space-y-4">
-            <div className="text-center text-sm text-muted-foreground">
-              <p className="mb-3 font-medium">Comandos que puedes usar:</p>
+          <div className="space-y-6 py-4">
+            <div className="text-center">
+              <h3 className="text-lg font-semibold mb-2">Comandos que puedes usar</h3>
+              <p className="text-sm text-muted-foreground">Presiona el micrófono y di uno de estos comandos</p>
             </div>
             
             {/* Gastos */}
-            <div className="space-y-2">
-              <p className="text-xs font-medium text-muted-foreground">Registrar gastos:</p>
-              <div className="flex flex-wrap gap-2">
+            <div className="space-y-3">
+              <div className="flex items-center gap-2">
+                <div className="h-8 w-8 rounded-full bg-red-100 flex items-center justify-center">
+                  <span className="text-red-600 text-sm font-semibold">-</span>
+                </div>
+                <h4 className="text-sm font-semibold text-red-900">Registrar gastos</h4>
+              </div>
+              <div className="flex flex-wrap gap-2 pl-10">
                 {SUGGESTED_COMMANDS.gastos.map((cmd, idx) => (
                   <button
                     key={idx}
                     onClick={() => handleSuggestedCommand(cmd)}
-                    className="px-3 py-1.5 text-xs bg-red-100 text-red-800 rounded-full hover:bg-red-200 transition-colors"
+                    className="px-4 py-2 text-sm bg-red-50 text-red-700 rounded-lg hover:bg-red-100 transition-colors border border-red-200"
                   >
                     &quot;{cmd}&quot;
                   </button>
@@ -693,14 +817,19 @@ export function VoiceAssistant({ onTransactionCreated }: VoiceAssistantProps) {
             </div>
 
             {/* Ingresos */}
-            <div className="space-y-2">
-              <p className="text-xs font-medium text-muted-foreground">Registrar ingresos:</p>
-              <div className="flex flex-wrap gap-2">
+            <div className="space-y-3">
+              <div className="flex items-center gap-2">
+                <div className="h-8 w-8 rounded-full bg-green-100 flex items-center justify-center">
+                  <span className="text-green-600 text-sm font-semibold">+</span>
+                </div>
+                <h4 className="text-sm font-semibold text-green-900">Registrar ingresos</h4>
+              </div>
+              <div className="flex flex-wrap gap-2 pl-10">
                 {SUGGESTED_COMMANDS.ingresos.map((cmd, idx) => (
                   <button
                     key={idx}
                     onClick={() => handleSuggestedCommand(cmd)}
-                    className="px-3 py-1.5 text-xs bg-green-100 text-green-800 rounded-full hover:bg-green-200 transition-colors"
+                    className="px-4 py-2 text-sm bg-green-50 text-green-700 rounded-lg hover:bg-green-100 transition-colors border border-green-200"
                   >
                     &quot;{cmd}&quot;
                   </button>
@@ -709,14 +838,19 @@ export function VoiceAssistant({ onTransactionCreated }: VoiceAssistantProps) {
             </div>
 
             {/* Consultas */}
-            <div className="space-y-2">
-              <p className="text-xs font-medium text-muted-foreground">Hacer consultas:</p>
-              <div className="flex flex-wrap gap-2">
+            <div className="space-y-3">
+              <div className="flex items-center gap-2">
+                <div className="h-8 w-8 rounded-full bg-blue-100 flex items-center justify-center">
+                  <span className="text-blue-600 text-sm font-semibold">?</span>
+                </div>
+                <h4 className="text-sm font-semibold text-blue-900">Hacer consultas</h4>
+              </div>
+              <div className="flex flex-wrap gap-2 pl-10">
                 {SUGGESTED_COMMANDS.consultas.map((cmd, idx) => (
                   <button
                     key={idx}
                     onClick={() => handleSuggestedCommand(cmd)}
-                    className="px-3 py-1.5 text-xs bg-blue-100 text-blue-800 rounded-full hover:bg-blue-200 transition-colors"
+                    className="px-4 py-2 text-sm bg-blue-50 text-blue-700 rounded-lg hover:bg-blue-100 transition-colors border border-blue-200"
                   >
                     &quot;{cmd}&quot;
                   </button>
@@ -725,14 +859,19 @@ export function VoiceAssistant({ onTransactionCreated }: VoiceAssistantProps) {
             </div>
 
             {/* Navegación */}
-            <div className="space-y-2">
-              <p className="text-xs font-medium text-muted-foreground">Navegar:</p>
-              <div className="flex flex-wrap gap-2">
+            <div className="space-y-3">
+              <div className="flex items-center gap-2">
+                <div className="h-8 w-8 rounded-full bg-purple-100 flex items-center justify-center">
+                  <span className="text-purple-600 text-sm font-semibold">→</span>
+                </div>
+                <h4 className="text-sm font-semibold text-purple-900">Navegar</h4>
+              </div>
+              <div className="flex flex-wrap gap-2 pl-10">
                 {SUGGESTED_COMMANDS.navegacion.map((cmd, idx) => (
                   <button
                     key={idx}
                     onClick={() => handleSuggestedCommand(cmd)}
-                    className="px-3 py-1.5 text-xs bg-purple-100 text-purple-800 rounded-full hover:bg-purple-200 transition-colors"
+                    className="px-4 py-2 text-sm bg-purple-50 text-purple-700 rounded-lg hover:bg-purple-100 transition-colors border border-purple-200"
                   >
                     &quot;{cmd}&quot;
                   </button>
@@ -754,7 +893,7 @@ export function VoiceAssistant({ onTransactionCreated }: VoiceAssistantProps) {
             </ul>
           </div>
         )}
-      </CardContent>
-    </Card>
+      </div>
+    </div>
   )
 }

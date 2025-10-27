@@ -597,29 +597,29 @@ export function validateParsedCommand(
 }
 
 /**
- * Genera un mensaje de confirmación para el usuario
+ * Genera un mensaje de confirmación para el usuario (versión concisa pero informativa)
  */
 export function generateConfirmationMessage(parsed: ParsedVoiceCommand): string {
-  const { transactionType, amount, categoryName, description } = parsed
+  const { transactionType, amount, categoryName, accountName } = parsed
 
   if (!transactionType || !amount) {
-    return "No pude entender completamente tu comando. ¿Podrías repetirlo?"
+    return "Repite el comando"
   }
 
   const amountFormatted = amount.toLocaleString("es-CO")
-  const action = transactionType === "ingreso" ? "registrar un ingreso" : "registrar un gasto"
+  const action = transactionType === "ingreso" ? "Ingreso" : "Gasto"
 
-  let message = `Voy a ${action} de $${amountFormatted} pesos`
+  let message = `${action} de ${amountFormatted} pesos`
 
   if (categoryName) {
-    message += ` en la categoría ${categoryName}`
+    message += ` en ${categoryName}`
   }
 
-  if (description && description !== "Transacción por voz") {
-    message += ` con la descripción: "${description}"`
+  if (accountName) {
+    message += `, cuenta ${accountName}`
   }
 
-  message += ". ¿Es correcto?"
+  message += ". ¿Confirmas?"
 
   return message
 }
@@ -645,17 +645,24 @@ export function generateSuggestions(
     }
 
     if (validation.missingFields.includes("categoría")) {
-      // Si tenemos categorías de la BD, sugerir esas
+      // Si tenemos categorías de la BD, sugerir una mezcla de gastos e ingresos
       if (dbCategories && dbCategories.length > 0) {
-        dbCategories.slice(0, 4).forEach(c => {
+        // Filtrar por tipo para dar variedad
+        const gastoCategories = dbCategories.filter(c => c.type === 'gasto').slice(0, 2)
+        const ingresoCategories = dbCategories.filter(c => c.type === 'ingreso').slice(0, 2)
+        
+        gastoCategories.forEach(c => {
+          suggestions.push(`en ${c.name.toLowerCase()}`)
+        })
+        ingresoCategories.forEach(c => {
           suggestions.push(`en ${c.name.toLowerCase()}`)
         })
       } else {
-        // Fallback a sugerencias genéricas
+        // Fallback a sugerencias genéricas con variedad
         suggestions.push("en alimentos")
         suggestions.push("en transporte")
-        suggestions.push("en servicios")
         suggestions.push("de salario")
+        suggestions.push("freelance")
       }
     }
 

@@ -3,8 +3,7 @@
 import { useState, useEffect } from "react"
 import { Plus } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { MainNav } from "@/components/layout/main-nav"
-import { MobileNav } from "@/components/layout/mobile-nav"
+import { AppLayout } from "@/components/layout/app-layout"
 import { AccountCard } from "@/components/accounts/account-card"
 import { AccountFormDialog } from "@/components/accounts/account-form-dialog"
 import type { Account } from "@/lib/types"
@@ -66,10 +65,8 @@ export default function CuentasPage() {
   }
 
   return (
-    <div className="min-h-screen bg-background">
-      <MainNav />
-
-      <main className="container mx-auto px-4 py-8 pb-24 md:pb-8">
+    <AppLayout onTransactionCreated={fetchAccounts}>
+      <div className="container mx-auto px-4 py-8 pb-24 md:pb-8">
         <div className="flex items-center justify-between mb-8">
           <div>
             <h1 className="text-3xl font-bold text-balance">Cuentas</h1>
@@ -104,9 +101,7 @@ export default function CuentasPage() {
             ))}
           </div>
         )}
-      </main>
-
-      <MobileNav />
+      </div>
 
       <AccountFormDialog
         open={dialogOpen}
@@ -114,6 +109,6 @@ export default function CuentasPage() {
         account={selectedAccount}
         onSuccess={fetchAccounts}
       />
-    </div>
+    </AppLayout>
   )
 }

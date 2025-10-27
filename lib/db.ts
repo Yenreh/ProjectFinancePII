@@ -380,6 +380,51 @@ export const dbQueries = {
       total: Number(row.total),
       percentage: Number(row.percentage)
     }))
+  },
+
+  // Incomes by category report
+  async getIncomesByCategory(filters: { startDate?: string; endDate?: string } = {}): Promise<CategoryExpense[]> {
+    if (!sql) return []
+
+    let whereClause = `WHERE t.transaction_type = 'ingreso'`
+    const values: any[] = []
+    let paramIndex = 1
+
+    if (filters.startDate) {
+      whereClause += ` AND t.transaction_date >= $${paramIndex++}`
+      values.push(filters.startDate)
+    }
+    if (filters.endDate) {
+      whereClause += ` AND t.transaction_date <= $${paramIndex++}`
+      values.push(filters.endDate)
+    }
+
+    const query = `
+      SELECT 
+        c.name as category_name,
+        c.icon as category_icon, 
+        c.color as category_color,
+        SUM(t.amount) as total,
+        (SUM(t.amount) * 100.0 / (
+          SELECT SUM(amount) 
+          FROM transactions t2 
+          ${whereClause.replace('t.', 't2.')}
+        )) as percentage
+      FROM transactions t
+      JOIN categories c ON t.category_id = c.id
+      ${whereClause}
+      GROUP BY c.id, c.name, c.icon, c.color
+      ORDER BY total DESC
+    `
+
+    const result = await sql.query(query, values)
+    return result.map(row => ({
+      category_name: row.category_name,
+      category_icon: row.category_icon,
+      category_color: row.category_color,
+      total: Number(row.total),
+      percentage: Number(row.percentage)
+    }))
   }
 }
 
