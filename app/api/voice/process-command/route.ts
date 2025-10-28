@@ -224,13 +224,10 @@ async function processQuery(parsed: any) {
 
     switch (queryType) {
       case "ultimo_gasto": {
-        const response = await fetch(
-          `${process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"}/api/voice/last-transaction?type=gasto`,
-          { cache: "no-store" }
-        )
-        const data = await response.json()
+        // Obtener transacciones de tipo gasto directamente
+        const allTransactions = await dbQueries.getTransactions({ type: "gasto" })
 
-        if (!data.success || !data.transaction) {
+        if (allTransactions.length === 0) {
           const result: VoiceProcessingResult = {
             success: true,
             message: "No tienes gastos registrados todavía",
@@ -240,11 +237,11 @@ async function processQuery(parsed: any) {
           return NextResponse.json(result)
         }
 
-        const t = data.transaction
-        const amount = t.amount.toLocaleString("es-CO")
+        const lastTransaction = allTransactions[0]
+        const amount = Number(lastTransaction.amount).toLocaleString("es-CO")
         const result: VoiceProcessingResult = {
           success: true,
-          message: `Tu último gasto fue de ${amount} pesos en ${t.categoryName}`,
+          message: `Tu último gasto fue de ${amount} pesos en ${lastTransaction.category_name}`,
           parsedCommand: parsed,
           needsConfirmation: false,
         }
@@ -252,13 +249,10 @@ async function processQuery(parsed: any) {
       }
 
       case "ultimo_ingreso": {
-        const response = await fetch(
-          `${process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"}/api/voice/last-transaction?type=ingreso`,
-          { cache: "no-store" }
-        )
-        const data = await response.json()
+        // Obtener transacciones de tipo ingreso directamente
+        const allTransactions = await dbQueries.getTransactions({ type: "ingreso" })
 
-        if (!data.success || !data.transaction) {
+        if (allTransactions.length === 0) {
           const result: VoiceProcessingResult = {
             success: true,
             message: "No tienes ingresos registrados todavía",
@@ -268,11 +262,11 @@ async function processQuery(parsed: any) {
           return NextResponse.json(result)
         }
 
-        const t = data.transaction
-        const amount = t.amount.toLocaleString("es-CO")
+        const lastTransaction = allTransactions[0]
+        const amount = Number(lastTransaction.amount).toLocaleString("es-CO")
         const result: VoiceProcessingResult = {
           success: true,
-          message: `Tu último ingreso fue de ${amount} pesos en ${t.categoryName}`,
+          message: `Tu último ingreso fue de ${amount} pesos en ${lastTransaction.category_name}`,
           parsedCommand: parsed,
           needsConfirmation: false,
         }
@@ -284,20 +278,29 @@ async function processQuery(parsed: any) {
         const isGasto = text.includes("gast") || text.includes("egres")
         const isIngreso = text.includes("ingres") || text.includes("recib")
 
-        let typeParam = ""
+        let type: "gasto" | "ingreso" | undefined = undefined
         if (isGasto && !isIngreso) {
-          typeParam = "?type=gasto"
+          type = "gasto"
         } else if (isIngreso && !isGasto) {
-          typeParam = "?type=ingreso"
+          type = "ingreso"
         }
 
-        const response = await fetch(
-          `${process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"}/api/voice/today-total${typeParam}`,
-          { cache: "no-store" }
-        )
-        const data = await response.json()
+        // Obtener fecha de hoy
+        const today = new Date().toISOString().split("T")[0]
 
-        if (!data.success) {
+        // Obtener transacciones del día directamente
+        const todayTransactions = await dbQueries.getTransactions({
+          type,
+          startDate: today,
+          endDate: today,
+        })
+
+        const total = todayTransactions.reduce(
+          (sum, transaction) => sum + Number(transaction.amount),
+          0
+        )
+
+        if (total === 0) {
           const result: VoiceProcessingResult = {
             success: true,
             message: "No tienes transacciones registradas para hoy",
@@ -307,11 +310,9 @@ async function processQuery(parsed: any) {
           return NextResponse.json(result)
         }
 
-        const typeText = data.data.type === "gasto" ? "Gastaste" : data.data.type === "ingreso" ? "Recibiste" : "Moviste"
-        const amount = data.data.total.toLocaleString("es-CO")
-        const message = data.data.total > 0
-          ? `${typeText} ${amount} pesos el día de hoy`
-          : "No tienes transacciones registradas para hoy"
+        const typeText = type === "gasto" ? "Gastaste" : type === "ingreso" ? "Recibiste" : "Moviste"
+        const amount = total.toLocaleString("es-CO")
+        const message = `${typeText} ${amount} pesos el día de hoy`
 
         const result: VoiceProcessingResult = {
           success: true,
