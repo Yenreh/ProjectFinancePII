@@ -188,7 +188,7 @@ export const dbQueries = {
       values.push(filters.endDate)
     }
 
-    query += ` ORDER BY t.transaction_date DESC`
+    query += ` ORDER BY t.transaction_date DESC, t.created_at DESC`
 
     const result = await sql.query(query, values)
     

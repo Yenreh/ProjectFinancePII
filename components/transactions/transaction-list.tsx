@@ -56,7 +56,7 @@ export function TransactionList({
                 })}
               </h3>
               <span className={`text-sm font-medium ${dayBalance >= 0 ? "text-success" : "text-destructive"}`}>
-                {dayBalance >= 0 ? "+" : ""}${dayBalance.toFixed(2)}
+                {dayBalance >= 0 ? "+" : "-"}${Math.abs(dayBalance).toLocaleString("es-CO")}
               </span>
             </div>
             <div className="space-y-2">
