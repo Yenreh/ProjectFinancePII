@@ -1,9 +1,11 @@
 import { NextRequest, NextResponse } from "next/server"
 import { ElevenLabsClient } from "@elevenlabs/elevenlabs-js"
 
-const elevenlabs = new ElevenLabsClient({
-  apiKey: process.env.ELEVEN_LABS_API_KEY,
-})
+function getElevenLabsClient() {
+  return new ElevenLabsClient({
+    apiKey: process.env.ELEVEN_LABS_API_KEY || "",
+  })
+}
 
 export async function POST(request: NextRequest) {
   try {
@@ -20,6 +22,8 @@ export async function POST(request: NextRequest) {
     // Puedes cambiar esto por otra voz de ElevenLabs
     const selectedVoiceId = voiceId || "21m00Tcm4TlvDq8ikWAM"
 
+    const elevenlabs = getElevenLabsClient()
+    
     // Generar audio usando ElevenLabs TTS
     const audio = await elevenlabs.textToSpeech.convert(selectedVoiceId, {
       text,

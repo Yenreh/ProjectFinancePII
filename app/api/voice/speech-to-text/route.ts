@@ -1,9 +1,11 @@
 import { NextRequest, NextResponse } from "next/server"
 import { ElevenLabsClient } from "@elevenlabs/elevenlabs-js"
 
-const elevenlabs = new ElevenLabsClient({
-  apiKey: process.env.ELEVEN_LABS_API_KEY,
-})
+function getElevenLabsClient() {
+  return new ElevenLabsClient({
+    apiKey: process.env.ELEVEN_LABS_API_KEY || "",
+  })
+}
 
 export async function POST(request: NextRequest) {
   try {
