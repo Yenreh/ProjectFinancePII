@@ -38,10 +38,10 @@ export default function DashboardPage() {
 
   return (
     <AppLayout onTransactionCreated={handleDataRefresh}>
-      <div className="container mx-auto px-4 py-8 pb-24 md:pb-8">
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-balance mb-2">Dashboard</h1>
-          <p className="text-muted-foreground">Resumen de tus finanzas personales</p>
+      <div className="container mx-auto px-3 sm:px-4 py-6 sm:py-8 pb-32 md:pb-8 max-w-full overflow-hidden">
+        <div className="mb-6 sm:mb-8">
+          <h1 className="text-2xl sm:text-3xl font-bold text-balance mb-2">Dashboard</h1>
+          <p className="text-sm sm:text-base text-muted-foreground">Resumen de tus finanzas personales</p>
         </div>
 
         {loading ? (

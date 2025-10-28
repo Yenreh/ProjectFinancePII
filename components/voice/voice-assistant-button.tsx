@@ -24,13 +24,13 @@ export function VoiceAssistantButton({ onTransactionCreated }: VoiceAssistantBut
 
   return (
     <>
-      {/* Botón flotante */}
+      {/* Botón flotante - ajustado para no chocar con la barra de navegación móvil */}
       <Button
         size="lg"
-        className="fixed bottom-6 right-6 h-16 w-16 rounded-full shadow-lg z-50 hover:scale-110 transition-transform"
+        className="fixed bottom-20 right-4 md:bottom-6 md:right-6 h-14 w-14 md:h-16 md:w-16 rounded-full shadow-lg z-40 hover:scale-110 transition-transform"
         onClick={() => setIsOpen(true)}
       >
-        <Mic className="h-6 w-6" />
+        <Mic className="h-5 w-5 md:h-6 md:w-6" />
         <span className="sr-only">Abrir asistente de voz</span>
       </Button>
 
